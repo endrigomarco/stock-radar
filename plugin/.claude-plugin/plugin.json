@@ -1,0 +1,14 @@
+{
+  "name": "stock-radar",
+  "version": "0.1.0",
+  "description": "Instruction scaffold for collecting stock signals, preparing trigger tracking, and analyzing outcomes through a future Stock Radar service.",
+  "author": {
+    "name": "Endrigo Marco"
+  },
+  "keywords": [
+    "stocks",
+    "signals",
+    "analysis",
+    "webhooks"
+  ]
+}

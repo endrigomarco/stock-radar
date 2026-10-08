@@ -1,0 +1,133 @@
+name: stock-radar
+
+services:
+  postgres:
+    image: postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-stock_radar}
+      POSTGRES_DB: ${POSTGRES_DB:-stock_radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the selected environment file}
+      TZ: UTC
+    command: [postgres, -c, timezone=UTC, -c, log_timezone=UTC]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  python:
+    image: stock-radar-python:local
+    build:
+      context: .
+      target: runtime
+    profiles: [tools]
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks:
+      - backend
+
+
+  migrations:
+    extends:
+      service: python
+    entrypoint: [alembic]
+    command: [current]
+    environment:
+      WEBHOOK_POSTGRES_PASSWORD: ${WEBHOOK_POSTGRES_PASSWORD:-}
+      COLLECTOR_POSTGRES_PASSWORD: ${COLLECTOR_POSTGRES_PASSWORD:-}
+      APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD:-}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: ${POSTGRES_USER:-stock_radar}
+      POSTGRES_DB: ${POSTGRES_DB:-stock_radar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the selected environment file}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: stock-radar-python:local
+    build:
+      context: .
+      target: runtime
+    command: [uvicorn, stock_radar.app:create_app, --factory, --host, 0.0.0.0, --port, '8000', --no-access-log, --no-proxy-headers]
+    environment:
+      LOG_DIRECTORY: /var/log/stock-radar
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:-}
+      API_COLLECTOR_TOKEN: ${API_COLLECTOR_TOKEN:-}
+      API_READER_TOKEN: ${API_READER_TOKEN:-}
+      WEBHOOK_POSTGRES_PASSWORD: ${WEBHOOK_POSTGRES_PASSWORD:-}
+      COLLECTOR_POSTGRES_PASSWORD: ${COLLECTOR_POSTGRES_PASSWORD:-}
+      APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD:-}
+      POSTGRES_DB: ${POSTGRES_DB:-stock_radar}
+      POSTGRES_HOST: postgres
+    volumes:
+      - application_logs:/var/log/stock-radar
+    ports:
+      - '127.0.0.1:${API_PORT:-8000}:8000'
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [backend, http]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  errors:
+    extends:
+      service: python
+    command: [python, -m, stock_radar.observability.query]
+    environment:
+      LOG_DIRECTORY: /var/log/stock-radar
+      ERROR_LOOKUP_ID: ${ERROR_LOOKUP_ID:-}
+    volumes:
+      - application_logs:/var/log/stock-radar:ro
+
+  tests:
+    extends:
+      service: migrations
+    image: stock-radar-tests:local
+    build:
+      context: .
+      target: tests
+    entrypoint: [python]
+    environment:
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:-}
+      API_COLLECTOR_TOKEN: ${API_COLLECTOR_TOKEN:-}
+      API_READER_TOKEN: ${API_READER_TOKEN:-}
+
+networks:
+  backend:
+    internal: true
+  http:
+
+volumes:
+  postgres_data:
+  application_logs:

@@ -1,0 +1,18 @@
+---
+description: Stock Radar project scope, shared engineering guidance and evidence requirements.
+alwaysApply: true
+---
+
+Read @README.md and @docs/README.md before changes.
+OpenAI / Codex follows @AGENTS.md; Claude Code follows @CLAUDE.md.
+These shared Cursor rules do not override that role split or the initial setup exception.
+Follow @docs/project-conventions.md, @docs/engineering-standards.md,
+@docs/security-basic.md, @docs/testing.md and @docs/git-workflow.md.
+Read the architecture, experiment, database and API documents affected by the task.
+
+Use Python/FastAPI, PostgreSQL and the colocated Claude plugin. The MVP has no frontend.
+Repository documentation distinguishes implemented functionality from proposed contracts.
+Inspect actual files before claiming a command, tool or integration exists.
+Do not copy agent-role restrictions or product features from reference projects.
+Never use em dashes. Do not commit secrets or real collected data.
+Keep financial calculations in shared backend services, not in prompts.

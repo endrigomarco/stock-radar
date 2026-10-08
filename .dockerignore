@@ -1,0 +1,13 @@
+# Explicit allowlist. Add application source with implementation.
+**
+!Dockerfile
+!.dockerignore
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!src/
+!src/**
+!migrations/
+!migrations/**
+**/__pycache__/
+**/*.py[cod]
