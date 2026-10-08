@@ -69,6 +69,36 @@ cost. Reuse existing structures when they meet that need clearly.
 For substantial plans, briefly explain the outcome delivered now, the essential safeguards and what is
 deferred. Justify material new complexity in that context; do not turn this into a checklist for tiny edits.
 
+## Claude Code prompt format
+
+Every prompt intended for Claude Code must start with exactly one of these lines:
+
+- `AUTO MODE ON`: bounded work ready for implementation, with material product decisions resolved.
+- `PLAN MODE ON`: investigation and planning when material ambiguity, architectural decisions or
+  insufficient evidence remain. Explicitly prohibit implementation and repository edits in this mode.
+
+These lines communicate the requested workflow; they do not prove that a client permission or mode
+setting has changed. Never combine both modes in one prompt.
+
+Deliver a self-contained, ready-to-copy prompt in a single writing block. Keep explanatory text outside
+the block. Scale detail to the task and include only relevant sections:
+
+- Objective, repository path and confirmed context.
+- Approved decisions, exact scope and exclusions. Label unapproved suggestions as proposals.
+- Instructions to inspect the repository, follow CLAUDE.md and preserve existing changes.
+- Observable acceptance criteria, proportional validation and owning documentation updates.
+- Boundaries for credentials, external calls, costs, migrations, deployment and Git operations,
+  respecting authorization already given by the user.
+- Expected delivery report.
+
+Implementation prompts must request changed files and reasons, checks actually run and their results,
+checks omitted and why, assumptions or deviations, remaining limitations, and disclosure of external
+calls or real-world side effects. Planning prompts must request a bounded plan and identify material
+unresolved choices without treating them as approved.
+
+Do not prescribe speculative internals or expand prompts into exhaustive checklists. Allow Claude Code
+to resolve routine technical choices within the agreed scope. A prompt is not evidence of implementation.
+
 ## Completion
 
 Update the document that owns the changed behavior. Run proportionate validation from

@@ -140,24 +140,27 @@ class TrackingRun(IdentityMixin, Base):
     __tablename__ = "tracking_runs"
     __table_args__ = (
         CheckConstraint("reference_price > 0", name="reference_positive"),
-        CheckConstraint("status IN ('prepared', 'active', 'completed', 'cancelled')", name="status_valid"),
+        CheckConstraint("status IN ('prepared', 'active', 'completed', 'cancelled', 'expired')", name="status_valid"),
         CheckConstraint("price_coverage IN ('unknown', 'partial', 'verified')", name="price_coverage_valid"),
         CheckConstraint("expires_at > reference_at", name="expiry_after_reference"),
         CheckConstraint("activated_at IS NULL OR (activated_at >= reference_at AND activated_at < expires_at)", name="activation_window"),
         CheckConstraint("status != 'active' OR activated_at IS NOT NULL", name="active_requires_activation"),
         CheckConstraint("payload_hash ~ '^[0-9a-f]{64}$'", name="payload_hash_sha256"),
+        CheckConstraint("num_nulls(reference_price, reference_at, reference_source_id, reference_evidence, expires_at) IN (0, 5)", name="reference_all_or_none"),
+        CheckConstraint("status NOT IN ('active', 'completed', 'expired') OR reference_price IS NOT NULL", name="started_requires_reference"),
     )
 
     client_tracking_id: Mapped[UUID] = mapped_column(Uuid, unique=True)
     payload_hash: Mapped[str] = mapped_column(String(64))
     signal_observation_id: Mapped[UUID] = mapped_column(ForeignKey("signal_observations.id", ondelete="RESTRICT"), index=True)
     experiment_version_id: Mapped[UUID] = mapped_column(ForeignKey("experiment_versions.id", ondelete="RESTRICT"), index=True)
-    reference_price: Mapped[Decimal] = mapped_column(Numeric(24, 8))
-    reference_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    reference_source_id: Mapped[UUID] = mapped_column(ForeignKey("sources.id", ondelete="RESTRICT"), index=True)
-    reference_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    reference_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 8))
+    reference_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reference_source_id: Mapped[UUID | None] = mapped_column(ForeignKey("sources.id", ondelete="RESTRICT"), index=True)
+    reference_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    admitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), server_default="prepared")
     price_coverage: Mapped[str] = mapped_column(String(16), server_default="unknown")
     coverage_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
@@ -209,16 +212,32 @@ class WebhookReceipt(IdentityMixin, Base):
     last_error_code: Mapped[str | None] = mapped_column(String(80))
 
 
+class PriceQuote(IdentityMixin, Base):
+    __tablename__ = "price_quotes"
+    __table_args__ = (
+        UniqueConstraint("instrument_id", "source_id", "quoted_at"),
+        CheckConstraint("price > 0", name="price_positive"),
+    )
+
+    instrument_id: Mapped[UUID] = mapped_column(ForeignKey("instruments.id", ondelete="RESTRICT"))
+    source_id: Mapped[UUID] = mapped_column(ForeignKey("sources.id", ondelete="RESTRICT"), index=True)
+    price: Mapped[Decimal] = mapped_column(Numeric(24, 8))
+    quoted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class TriggerEvent(IdentityMixin, Base):
     __tablename__ = "trigger_events"
     __table_args__ = (
         UniqueConstraint("trigger_level_id"),
         CheckConstraint("observed_price IS NULL OR observed_price > 0", name="price_positive"),
         CheckConstraint("evidence_quality IN ('timestamped', 'coarse', 'unknown')", name="evidence_quality_valid"),
+        CheckConstraint("num_nonnulls(webhook_receipt_id, price_quote_id) = 1", name="evidence_single"),
     )
 
     trigger_level_id: Mapped[UUID] = mapped_column(ForeignKey("trigger_levels.id", ondelete="RESTRICT"))
-    webhook_receipt_id: Mapped[UUID] = mapped_column(ForeignKey("webhook_receipts.id", ondelete="RESTRICT"), index=True)
+    webhook_receipt_id: Mapped[UUID | None] = mapped_column(ForeignKey("webhook_receipts.id", ondelete="RESTRICT"), index=True)
+    price_quote_id: Mapped[UUID | None] = mapped_column(ForeignKey("price_quotes.id", ondelete="RESTRICT"), index=True)
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     observed_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 8))
     evidence_quality: Mapped[str] = mapped_column(String(16), server_default="unknown")

@@ -1,3 +1,4 @@
+from decimal import Decimal
 import hashlib
 import json
 from uuid import UUID
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from stock_radar.db.models import CollectionRun, Instrument, SignalObservation, Source
 from stock_radar.services.errors import ServiceError
+from stock_radar.services.tracking import TrackingService
 from stock_radar.viewmodels.collections import CollectionInput, CollectionOutput, ObservationInput, SignalOutput, SignalPage, SignalQuery
 
 
@@ -17,6 +19,10 @@ def eligible_expression():
         & (SignalObservation.normalized_rating == "strong_buy")
         & (SignalObservation.daily_change_percent < 0)
     )
+
+
+def is_eligible(signal_kind: str, normalized_rating: str | None, daily_change_percent: Decimal | None) -> bool:
+    return signal_kind == "analyst_consensus" and normalized_rating == "strong_buy" and daily_change_percent is not None and daily_change_percent < 0
 
 
 class CollectionService:
@@ -43,6 +49,8 @@ class CollectionService:
                     raise ServiceError("collection_identity_conflict", 409)
                 collection_id = existing.id
             else:
+                tracking = TrackingService(self.session)
+                version = tracking.current_version()
                 for row in sorted(request.observations, key=lambda item: (item.exchange, item.symbol, item.signal_kind)):
                     instrument_id = self.session.scalar(insert(Instrument).values(
                         exchange=row.exchange, symbol=row.symbol, currency=row.currency,
@@ -57,7 +65,7 @@ class CollectionService:
                     missing = [name for name, value in observed_values.items() if value is None]
                     if rating is None:
                         missing.append("normalized_rating")
-                    self.session.add(SignalObservation(
+                    observation = SignalObservation(
                         collection_run_id=collection_id, instrument_id=instrument_id,
                         signal_kind=row.signal_kind, source_symbol=row.source_symbol,
                         source_column=row.source_column, original_rating=row.original_rating,
@@ -66,7 +74,11 @@ class CollectionService:
                         observed_at=row.observed_at, source_published_at=row.source_published_at,
                         parse_status="partial" if missing else "valid", raw_evidence=row.raw_evidence,
                         quality_details={"missing_or_unknown": missing} if missing else {},
-                    ))
+                    )
+                    self.session.add(observation)
+                    if version is not None and is_eligible(row.signal_kind, rating, row.daily_change_percent):
+                        self.session.flush()
+                        tracking.attach(observation.id, instrument_id, version)
                 self.session.flush()
             result = self.get(collection_id)
             result.duplicate = duplicate
@@ -139,7 +151,7 @@ class SignalService:
 
     @staticmethod
     def _transform_output(entity: SignalObservation) -> SignalOutput:
-        eligible = entity.signal_kind == "analyst_consensus" and entity.normalized_rating == "strong_buy" and entity.daily_change_percent is not None and entity.daily_change_percent < 0
+        eligible = is_eligible(entity.signal_kind, entity.normalized_rating, entity.daily_change_percent)
         return SignalOutput(
             id=entity.id, collection_id=entity.collection_run_id, instrument_id=entity.instrument_id,
             signal_kind=entity.signal_kind, source_symbol=entity.source_symbol,

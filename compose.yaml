@@ -50,6 +50,7 @@ services:
       WEBHOOK_POSTGRES_PASSWORD: ${WEBHOOK_POSTGRES_PASSWORD:-}
       COLLECTOR_POSTGRES_PASSWORD: ${COLLECTOR_POSTGRES_PASSWORD:-}
       APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD:-}
+      MONITOR_POSTGRES_PASSWORD: ${MONITOR_POSTGRES_PASSWORD:-}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: '5432'
       POSTGRES_USER: ${POSTGRES_USER:-stock_radar}
@@ -94,6 +95,38 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: '3'
+
+  monitor:
+    image: stock-radar-python:local
+    build:
+      context: .
+      target: runtime
+    command: [python, -m, stock_radar.monitor]
+    environment:
+      LOG_DIRECTORY: /var/log/stock-radar
+      MONITOR_ENABLED: ${MONITOR_ENABLED:-false}
+      MONITOR_MAX_INSTRUMENTS: ${MONITOR_MAX_INSTRUMENTS:-30}
+      BRAPI_API_KEY: ${BRAPI_API_KEY:-}
+      MONITOR_POSTGRES_PASSWORD: ${MONITOR_POSTGRES_PASSWORD:-}
+      POSTGRES_DB: ${POSTGRES_DB:-stock_radar}
+      POSTGRES_HOST: postgres
+    volumes:
+      - application_logs:/var/log/stock-radar
+    init: true
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [backend, http]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
     logging:
       driver: local
       options:

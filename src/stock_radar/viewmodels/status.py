@@ -28,4 +28,4 @@ class StatusOutput(BaseModel):
     version: str = "0.1.0"
     database_available: bool = True
     last_complete_collection_at: datetime | None
-    capabilities: list[str] = ["sources", "collections", "signals", "data_quality", "webhook_receipts"]
+    capabilities: list[str] = ["sources", "collections", "signals", "data_quality", "webhook_receipts", "tracking_runs", "price_quotes", "trigger_events"]

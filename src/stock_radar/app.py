@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from stock_radar.controllers import collections, health, metrics, sources, status, webhooks
+from stock_radar.controllers import collections, health, metrics, sources, status, tracking, webhooks
 from stock_radar.mcp import create_mcp
 from stock_radar.middleware import RequestBoundary
 from stock_radar.services.errors import ServiceError
@@ -61,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sources.router)
     app.include_router(collections.router)
     app.include_router(status.router)
+    app.include_router(tracking.router)
     app.include_router(webhooks.router)
     mcp = create_mcp(app)
     app.mount("/", mcp.streamable_http_app(stateless_http=True, json_response=True))

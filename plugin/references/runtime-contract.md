@@ -27,7 +27,11 @@ Do not create alerts, trade, purchase subscriptions or change provider settings 
 
 Each tracking run has a fixed reference, six signed levels (1%, 2%, 3%), an explicit activation time and
 window. Get values from backend tools; do not silently choose the reference or compute production levels
-in the conversation. Alert setup is initially manual. There is no verified automatic alert-creation tool.
+in the conversation. The backend creates or reuses one open run per instrument when an eligible observation
+is ingested, and a server process sets the reference and records hits from polled quotes. Read them with
+`list_tracking_runs`, `list_latest_quotes` and `list_trigger_events`. A run without a reference is waiting;
+never supply a price for it. Polled coverage is partial: no recorded hit is not evidence of no crossing.
+Use `cancel_tracking_run` only when the user asks. Alert setup remains manual and unverified.
 
 Report numerator, eligible denominator, distinct assets, period, rule version, pending cases, ambiguity
 and coverage gaps. No received webhook is not evidence of no crossing. Do not infer full-path returns or

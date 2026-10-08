@@ -133,7 +133,8 @@ of the MacBook. Provider access and costs remain unverified; no subscription is 
 The API also receives a dedicated webhook token and restricted webhook database password. `make db-access`
 provisions `stock_radar_webhook` alongside the reader/collector roles. Recreate the API after changing
 credentials. Existing schema tables support this increment without a new migration. Register the source
-code `tradingview` through the collector API before receiving notifications. No source or tracking data is seeded.
+code `tradingview` through the collector API before receiving notifications. No source or tracking data is seeded,
+except that the monitor registers source `brapi` on its first open-market cycle.
 
 Normal processing runs after durable acknowledgement. Following interruption or mapping correction, use
 `make webhooks-process`, optionally `ARGS_WEBHOOKS="--limit 500"`. It operates inside the running API
@@ -143,6 +144,42 @@ processed receipts. There is no automatic recovery schedule. Inspect receipt sta
 The local endpoint requires an internal token and is not directly compatible with an unconfigured provider
 sender. An authorized VPS deployment must configure and test HTTPS sender verification, credential
 injection and gateway log redaction. No provider alert, gateway or VPS has been configured here.
+
+## Quote monitoring
+
+The `monitor` Compose service is a single process that reuses the tracking service directly; it does not call
+the API over HTTP and exposes no port. It is not started by `make up` and does nothing unless
+`MONITOR_ENABLED=true`. When disabled it logs `monitor_disabled` once and idles.
+
+Setup on a database you are allowed to change:
+
+1. Add `MONITOR_POSTGRES_PASSWORD` (at least 32 characters) and, when ready, `BRAPI_API_KEY` and
+   `MONITOR_ENABLED=true` to the private environment file. Never place the key in a command line, URL or chat.
+2. `make db-migrate`, then `make db-access`. The second command now requires `MONITOR_POSTGRES_PASSWORD` and
+   provisions `stock_radar_monitor` plus the new reader and collector grants. Recreate the API afterwards.
+3. `make monitor-once` runs one cycle immediately and prints its summary. It exits with code 2 when monitoring
+   is disabled or misconfigured, respects the calendar and capacity, and cannot overlap a running cycle.
+4. Continuous operation: `docker compose --env-file .env up --detach monitor`. Stop it with
+   `docker compose --env-file .env stop monitor`; `make down` also stops it.
+
+The continuous process wakes at each half hour, never immediately at startup, so a restart cannot burst
+requests. A session-level advisory lock ensures one cycle at a time across the service and the manual command.
+Each cycle first expires runs whose window ended, even when the market is closed or the provider is down.
+Outside a B3 session, or in a year without a versioned calendar, it makes no external call and logs
+`market_closed` in the cycle summary for a known closure, or `calendar_unavailable` with a warning of the
+same name when the year has no versioned calendar. During a session it admits waiting
+runs up to `MONITOR_MAX_INSTRUMENTS`, then makes one sequential request per monitored instrument with no
+database transaction open, and applies each accepted quote in its own short transaction. A failure for one
+instrument is logged and the others continue. The clock and the session are checked again immediately before
+each request: once the session has closed, the remaining instruments of that cycle are not queried, the summary
+reports `session_ended` with a `skipped` count, and they are not counted as provider failures. A request
+already started before the close is not aborted; its response still passes the temporal validation. A run cancelled while its quote was being fetched is not
+activated or evaluated, because the write transaction locks and rechecks it.
+
+Recover a run that never gets a valid quote with `POST /v1/tracking-runs/{id}/cancel` or the
+`cancel_tracking_run` tool; there is no automatic expiry of prepared runs. The stale-quote counter lives in
+process memory and restarts from zero with the process. No live request, VPS deployment or persistent
+migration has been performed for this increment. See [experiment rules](experiment.md) for acceptance rules.
 
 ## Diagnostics
 

@@ -138,3 +138,29 @@ container check confirmed application stack frames survive deep driver failures 
 Local authenticated metrics and HTTP correlation probes also passed.
 The named log volume also preserved a request event across local API container recreation; the Docker
 lookup command retrieved it by its original request ID.
+
+## Quote monitoring increment
+
+`tests/check_monitoring.py` drives the real monitoring cycle against PostgreSQL through the restricted monitor
+role, with a fake provider and an injected clock. It never calls brapi. It covers repeated indications reusing
+one run, a concurrent creation race across two experiment versions, the capacity limit and oldest-first
+admission, cancellation (idempotent, permission-checked, freeing a slot), activation only from a quote not
+earlier than the origin observation, the immutable reference and the 20 session expiry computed across a
+holiday. Temporal checks cover a future timestamp followed by a valid quote, a quote older than 60 minutes
+and one outside the session. Hit checks cover several levels in one quote, repeated and out-of-order quotes,
+completion, and a hit from the last session followed by expiry on a closed-market cycle with no provider call.
+It also checks a holiday, a weekend, the late opening on 18 February 2026, a missing calendar year, an
+activation without calendar coverage, a provider failure for one instrument, a run cancelled during the
+external call, the stale signal after five cycles, a first request that outlasts the close so the second is never started, overlap prevention, a pre-existing webhook run left
+untouched, an earlier webhook replacing quote evidence through the webhook role, the read routes and tools,
+and denied privileges. The provider client is checked with synthetic payloads and a loopback HTTP server
+for the Authorization header, the absence of the key in the URL and refused redirects.
+
+`tests/check_migrations.py` now upgrades to the initial revision, inserts tracking runs in every legacy
+status with a level, a receipt and an event, then applies the new revision and verifies those rows. It also
+checks the new constraints, the refusal to downgrade over polling evidence and a clean downgrade afterwards.
+
+Validated on 2026-10-08: the complete disposable Docker suite passed. Not validated: any real brapi request,
+the provider's actual delay and timestamp behavior, the continuous process over real half-hour slots,
+the migration on the development or any persistent database, and VPS operation. The calendar and hours were
+checked against B3 pages by reading, not by an automated test. No coverage gate is introduced.

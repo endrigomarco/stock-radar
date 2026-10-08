@@ -2,10 +2,12 @@
 
 ## Implementation status
 
-Ten normalized tables are defined in `src/stock_radar/db/models.py` and the initial Alembic revision
-`807ca9561c9f`. They support multiple sources, shared instruments and multiple versioned experiments.
+Eleven normalized tables are defined in `src/stock_radar/db/models.py` by the initial Alembic revision
+`807ca9561c9f` and the quote monitoring revision `b4d1c7e9a2f3`. They support multiple sources, shared
+instruments and multiple versioned experiments.
 The revision was applied to the local development database on 2026-10-07; Alembic reported no model/schema
-drift. There are no seeded providers, experiments, instruments or market observations. Creating this schema
+drift. Revision `b4d1c7e9a2f3` has only been applied to disposable test databases. It seeds experiment
+`tradingview_losers_strong_buy` version 1; no providers, instruments or market observations are seeded. Creating this schema
 does not implement financial analysis. The webhook receiver/processor now uses the existing receipt,
 tracking, level and event tables without a schema change. REST/MCP collection services now use the
 existing source, instrument, collection and observation tables without a schema change.
@@ -45,12 +47,17 @@ erDiagram
     sources |o--o{ trigger_levels : alerts
     sources ||--o{ webhook_receipts : delivers
     trigger_levels ||--o| trigger_events : first_hit
-    webhook_receipts ||--o{ trigger_events : supports
+    webhook_receipts |o--o{ trigger_events : supports
+    price_quotes |o--o{ trigger_events : supports
+    instruments ||--o{ price_quotes : quoted
+    sources ||--o{ price_quotes : provides
 ```
 
 An instrument belongs to no particular provider. Each source owns its collections; observations connect
 those collections to shared instruments. The same observation may support different experiments and
-versions. No uniqueness rule prevents separate, explicitly requested runs of the same experiment.
+versions. The tracking service allows one `prepared` or `active` run per instrument and experiment, across
+versions. It serializes creation with a transaction-level advisory lock keyed by experiment and instrument;
+there is no unique constraint, so rows inserted outside the service are not blocked.
 
 `signal_kind` describes what was observed, such as analyst consensus. `analysis_kind` identifies the
 method used by an experiment version, initially threshold crossing. These are separate concepts.
@@ -67,10 +74,11 @@ That capability is structural only: no additional analysis methods or generic st
 | `signal_observations` | Collection and instrument FKs, signal kind, original symbol/column/rating, normalized rating and mapping version, observed price/change, timestamps, parse status, raw and quality evidence | Unique `(collection_run_id, instrument_id, signal_kind)`; positive supplied price; change at least -100%; allowed parse status |
 | `experiments` | `code`, `name`, optional description; stable hypothesis identity | Unique nonblank `code` |
 | `experiment_versions` | Experiment FK, positive `version`, nonblank `analysis_kind`, rule snapshot | Unique `(experiment_id, version)`; rules must be a JSON object |
-| `tracking_runs` | Observation, experiment version and reference source FKs; client identity/hash; fixed reference price/time/evidence; activation, expiry, lifecycle and price coverage | Unique `client_tracking_id`; positive reference; expiry after reference; activation within window; active status requires activation |
+| `tracking_runs` | Observation, experiment version and optional reference source FKs; client identity/hash; nullable reference price/time/evidence and expiry until activation; `admitted_at`; activation, lifecycle and price coverage | Unique `client_tracking_id`; positive reference; expiry after reference; activation within window; active status requires activation; reference fields and expiry are all null or all set; `active`, `completed` and `expired` require a reference |
 | `trigger_levels` | Tracking FK, signed percentage, mathematical and configured prices, rounding policy, alert identity/provider/activation/expiry/evidence | Unique `(tracking_run_id, signed_percent)` and `alert_mapping_id`; nonzero percentage above -100%; positive supplied prices; valid alert window |
 | `webhook_receipts` | Source FK, deduplication key, optional provider event ID and reported mapping UUID, event/receipt times, sanitized payload, processing status/attempts/errors | Unique `(source_id, deduplication_key)`; nonblank deduplication key; nonnegative attempts |
-| `trigger_events` | Level and receipt FKs, supported occurrence time, observed price, evidence quality | Unique `trigger_level_id`; positive supplied price; allowed evidence quality |
+| `price_quotes` | Instrument and source FKs, price, provider market time `quoted_at`, `received_at` | Unique `(instrument_id, source_id, quoted_at)`; positive price |
+| `trigger_events` | Level FK and exactly one of receipt FK or price quote FK, supported occurrence time, observed price, evidence quality | Unique `trigger_level_id`; positive supplied price; allowed evidence quality; exactly one evidence reference |
 
 No extra status, currency, percentage or rating lookup tables are needed. Signal and analysis kinds are
 extensible text identifiers whose supported values will be validated by application services. Ratings
@@ -85,7 +93,8 @@ silently merge instruments on a bare ticker. No alias or corporate-action tables
 
 - Collection status: `complete`, `partial`, `failed`.
 - Observation parse status: `valid`, `partial`, `invalid`.
-- Tracking status: `prepared`, `active`, `completed`, `cancelled`.
+- Tracking status: `prepared`, `active`, `completed`, `cancelled`, `expired`. There is no separate active
+  flag. `admitted_at` null means a prepared run is waiting for a monitoring slot.
 - Price coverage and per-level alert coverage: `unknown`, `partial`, `verified`.
 - Receipt status: `pending`, `processed`, `unmapped`, `failed`.
 - Event evidence quality: `timestamped`, `coarse`, `unknown`.
@@ -106,8 +115,9 @@ selection, reference, session/window and metric policies. Query-critical fields,
 relationships remain typed columns. Original and normalized values coexist intentionally for audit.
 Reference and configured threshold prices are historical snapshots, not recalculated from current rules.
 
-Experiment versions and tracking reference fields must be immutable through the future service API.
-There are currently no update-blocking triggers or service enforcement. Corrections must preserve original
+Experiment versions and tracking reference fields must be immutable. The tracking service writes a reference
+only to a `prepared` run without one, under a row lock, and the monitor database role is the only application
+role allowed to update reference columns. There are no update-blocking triggers. Corrections must preserve original
 evidence and explicitly describe the correction; a full correction workflow is deferred. Do not claim
 that these business policies are enforced by the schema alone.
 
@@ -133,7 +143,9 @@ evidence must remain ambiguous in reporting. A receipt can support several level
 contract and its evidence actually justify it.
 
 The first experiment requests six levels, but that count and their price formula are service rules, not
-hardcoded schema constraints. Alert reconfiguration history and independent price feeds are deferred.
+hardcoded schema constraints. Polled runs create their levels at activation with no alert fields. Server-created
+runs fill `client_tracking_id` with a random UUID and `payload_hash` with a hash of their version and origin
+observation. Alert reconfiguration history is deferred.
 If several alert lifecycles per level become necessary, introduce a separate alert configuration table.
 
 ## Indexes and scope
@@ -142,13 +154,17 @@ Unique constraints supply indexes for identities and composite deduplication key
 cover remaining FK lookups, source/time collection queries, pending receipt processing and reported alert
 mapping lookup. Do not add speculative reporting indexes before concrete query requirements exist.
 
-This revision intentionally defines the agreed ten-table model. It does not seed an experiment with
-unresolved reference/session rules, create source adapters, expose API/MCP tools or deploy a service.
+Revision `b4d1c7e9a2f3` adds `price_quotes`, `tracking_runs.admitted_at`, the `expired` status, nullable
+reference fields and quote evidence for trigger events. Existing rows already satisfy the new checks because
+their reference fields were mandatory, so the upgrade does not rewrite or consolidate tracking runs. Its
+downgrade refuses to run while polling runs without a reference, expired runs or quote-backed events exist,
+instead of deleting them. Run `make db-access` after `make db-migrate`: collection registration needs the new
+grants on experiments and tracking runs.
 
 ## Code-first workflow
 
 SQLAlchemy models are the source of the intended schema. `src/stock_radar/db/models.py` owns the
-shared declarative Base and currently defines all ten mapped models. Alembic loads its
+shared declarative Base and currently defines all eleven mapped models. Alembic loads its
 metadata through `migrations/env.py`. No table creation occurs on import or application startup.
 Use Alembic revisions, not `Base.metadata.create_all()`, to evolve persistent databases.
 

@@ -5,10 +5,12 @@ Track stock recommendations, monitor price triggers, and analyze outcomes to mea
 ## Current status
 
 **Local REST and MCP backend with synthetic validation.** PostgreSQL, Python and all checks run in
-Docker. Ten normalized tables use random UUID primary keys and Alembic migrations. FastAPI and the
+Docker. Eleven normalized tables use random UUID primary keys and Alembic migrations. FastAPI and the
 official MCP SDK share services for sources, atomic collection ingestion, signal queries, status and
 quality reports, with separate reader and collector permissions. An authenticated webhook inbox deduplicates notifications and processes existing alert mappings.
-Tracking creation, financial metrics,
+Eligible signals now create reusable tracking runs, and a single Docker monitoring process can poll brapi
+quotes every 30 minutes during B3 sessions to lock references and record first observed threshold hits.
+Monitoring is disabled by default and has only been validated with a fake provider. Financial metrics,
 VPS deployment and live-provider integration remain pending. The plugin is an instruction scaffold and
 has not been connected to Cowork.
 

@@ -58,6 +58,25 @@ custom headers. A trusted HTTPS ingress must verify the actual sender and inject
 stripping incoming Authorization. The local API does not trust forwarded identity headers. Credentials
 must stay out of URLs and messages. See [webhook authentication](api/webhooks.md).
 
+## Quote monitoring boundary
+
+`BRAPI_API_KEY` is read from the environment by the monitor process only, wrapped as a secret setting and sent
+solely in the `Authorization: Bearer` header of sequential HTTPS requests to brapi. It is never placed in a URL,
+log line or error message. The client refuses redirects so the header cannot be forwarded to another host,
+bounds response size and time, and validates symbol, currency, price and timestamp before use. Provider
+responses are untrusted data. The API container does not receive the key.
+
+`stock_radar_monitor` reads instruments, signals, experiments, tracking data and quotes; inserts the `brapi`
+source, quotes, levels and events; and updates only lifecycle, admission, reference and coverage columns of
+tracking runs. It cannot delete rows, rewrite identities or hashes, or read webhook receipts. The reader gains
+SELECT on experiments, tracking runs, levels, events and quotes. The collector additionally inserts prepared
+runs and updates only their status. The webhook role gains UPDATE on `trigger_events.price_quote_id`, needed
+when its upsert replaces quote evidence.
+
+The new read routes and tools require the reader or collector token, and cancellation requires the collector
+token, on the same private listener. Cancellation takes a run UUID and no client-supplied state. The monitor
+publishes no port. Exposure beyond the private network remains deployment work.
+
 ## Telemetry
 
 Application logs store route templates, technical outcomes, generated correlation/error IDs and sanitized

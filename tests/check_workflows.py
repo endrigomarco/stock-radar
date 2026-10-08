@@ -26,7 +26,7 @@ def main() -> None:
         initialized = client.post("/mcp", headers=mcp_headers, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "synthetic-check", "version": "1"}}})
         assert initialized.status_code == 200, initialized.text
         listed = client.post("/mcp", headers=mcp_headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}).json()["result"]["tools"]
-        assert {item["name"] for item in listed} == {"list_sources", "register_source", "register_collection", "get_collection", "list_signals", "service_status", "data_quality_report"}
+        assert {item["name"] for item in listed} == {"list_sources", "register_source", "register_collection", "get_collection", "list_signals", "service_status", "data_quality_report", "list_tracking_runs", "list_latest_quotes", "list_trigger_events", "cancel_tracking_run"}
         assert call("register_source", {"request": {"code": "forbidden", "name": "Forbidden"}})["isError"]
         source_request = {"code": "tradingview", "name": "TradingView"}
         response = client.post("/v1/sources", headers=collector, json=source_request)

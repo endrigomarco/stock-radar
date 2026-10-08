@@ -11,8 +11,8 @@ behind its results. It does not execute trades or promise returns.
 1. Read the Brazilian biggest-losers universe and preserve the observed list, including other ratings
    when available for comparison. Record whether the traversal was complete.
 2. Select negative daily changes with analyst consensus Strong Buy.
-3. Start a versioned tracking run using an explicit reference price and observation window.
-4. Receive six directional threshold notifications and retain their evidence.
+3. Reuse or create one open tracking run per instrument and experiment; lock its reference at the first valid polled quote.
+4. Record the first observed hit of six directional thresholds from polled quotes and retain the evidence.
 5. Ask Claude for results, sample sizes, unresolved cases and data-quality limitations through MCP.
 
 The source is TradingView; the rating represents analyst consensus, not TradingView's own individual

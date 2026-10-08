@@ -2,11 +2,13 @@
 
 ## Implemented scope
 
-The Docker backend includes REST and MCP interfaces, Pydantic ViewModels, SQLAlchemy entities, ten
+The Docker backend includes REST and MCP interfaces, Pydantic ViewModels, SQLAlchemy entities, eleven
 normalized tables and Alembic migrations. Shared services register sources, persist collections atomically,
 normalize ratings, list signals and report status/data quality. Reader and collector tokens map to separate
 restricted database roles. Webhook receipt and processing of existing mappings are implemented with a restricted third database role.
-Tracking creation, financial metrics and live integrations remain pending.
+Collection registration creates or reuses tracking runs, and a separate monitoring process polls quotes,
+activates runs and records threshold hits through the same tracking service. Financial metrics and live
+integrations remain pending. See [quote monitoring](operations.md#quote-monitoring).
 
 ## Backend layers
 
@@ -71,7 +73,9 @@ protected readiness, independently of process liveness.
 
 The API receives reader/collector tokens and restricted database passwords, without administrator credentials.
 The reader has SELECT and the collector SELECT/INSERT on sources, instruments, collection_runs and
-signal_observations. Neither role can update/delete these records or read the tracking/webhook tables. Local HTTP is published on loopback only, with no trusted proxy
+signal_observations. Both read experiments, tracking runs, levels, events and price quotes. The collector also
+inserts prepared tracking runs and updates only their status, which is what cancellation needs. Neither role can
+delete records or read webhook receipts. The monitor process uses its own restricted role. Local HTTP is published on loopback only, with no trusted proxy
 headers, wildcard CORS or public interactive documentation. HTTPS and public-ingress controls remain
 requirements before an authorized VPS deployment. See [security](security-basic.md).
 

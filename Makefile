@@ -6,7 +6,7 @@ COMPOSE = docker compose --env-file "$(ENV_FILE)"
 
 export ERROR_LOOKUP_ID = $(ID)
 
-.PHONY: errors webhooks-process help config build up down status logs db test uv db-revision db-migrate db-check db-access
+.PHONY: errors webhooks-process monitor-once help config build up down status logs db test uv db-revision db-migrate db-check db-access
 
 help: ## Show the available commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  make %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -60,6 +60,9 @@ db-access: config build ## Configure reader, collector and webhook roles after m
 
 webhooks-process: config ## Retry a bounded batch of pending, unmapped and failed webhook receipts
 	$(COMPOSE) exec -T api python -m stock_radar.webhooks $(ARGS_WEBHOOKS)
+
+monitor-once: config build ## Run one quote monitoring cycle; requires MONITOR_ENABLED=true and BRAPI_API_KEY
+	$(COMPOSE) run --rm monitor python -m stock_radar.monitor --once
 
 errors: config ## Show retained warnings/errors, or find a request/error/receipt with ID=...
 	$(COMPOSE) run --rm --no-deps errors

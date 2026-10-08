@@ -26,6 +26,8 @@ export WEBHOOK_TOKEN=synthetic-webhook-token-for-isolated-tests-only
 export COLLECTOR_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
 export API_COLLECTOR_TOKEN=synthetic-collector-token-for-isolated-tests-only
 export APP_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
+export MONITOR_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
+export MONITOR_ENABLED=false BRAPI_API_KEY=
 export API_READER_TOKEN=synthetic-reader-token-for-isolated-tests-only
 : > "$test_dir/env"
 compose config --quiet
@@ -41,6 +43,7 @@ compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/chec
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_workflows.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_webhooks.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_observability.py
+compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_monitoring.py
 # Authenticate over TCP, write synthetic data, then recreate the container to
 # verify persistence. Cleanup removes only this unique test project and volume.
 compose exec -T postgres sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'

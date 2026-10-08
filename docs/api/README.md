@@ -22,7 +22,7 @@ for writes or reads. Missing/invalid credentials return 401; reader writes retur
 Invalid input returns 422 with field paths and error types, without submitted values. Missing identities
 return 404, identity/currency conflicts 409, bodies exceeding 1 MiB 413, and database failures a generic
 503. The error envelope uses `error.code`, except authentication errors which use FastAPI's `detail`.
-Successful registrations return 200 after commit, including retries. No delete/update operation is exposed.
+Successful registrations return 200 after commit, including retries. No delete operation is exposed; the only update is tracking-run cancellation.
 Public OpenAPI, Swagger and ReDoc routes remain disabled. The application exposes its schema programmatically.
 
 ## Sources and queries
@@ -104,8 +104,42 @@ No partial persistence or acknowledgement before commit is allowed.
 ## Deferred workflows
 
 Webhook receipt and processing of existing mappings are implemented separately, as described in
-[webhooks](webhooks.md). Tracking-run/level creation and financial summaries remain unimplemented. They require the pending reference/session and provider-authentication
-choices. See [experiment rules](../experiment.md), [webhooks](webhooks.md) and [MCP](mcp.md).
+[webhooks](webhooks.md). Financial summaries remain unimplemented. See [experiment rules](../experiment.md),
+[webhooks](webhooks.md) and [MCP](mcp.md).
+
+## Tracking, quotes and hits
+
+Registering a collection creates one `prepared` tracking run for each eligible observation whose instrument
+has no `prepared` or `active` run in the same experiment, across all experiment versions. Later eligible
+observations are stored as signals and reuse the open run; they never reset its reference, window or levels.
+Runs are created only inside the transaction that inserts their origin observation, so a retried collection
+or an already stored observation cannot create another run.
+
+| Route | Permission | Purpose |
+|---|---|---|
+| `GET /v1/tracking-runs` | Reader | Runs with status, admission, reference, window and level counts |
+| `GET /v1/quotes/latest` | Reader | Latest accepted quote per instrument |
+| `GET /v1/trigger-events` | Reader | First observed hit per level |
+| `POST /v1/tracking-runs/{id}/cancel` | Collector | Idempotent cancellation |
+
+All list routes accept `limit` (1 to 100, default 20) and `offset` (0 to 10000) and return `items`, `limit`,
+`offset`, `has_more`. Tracking runs filter by `status` (`prepared`, `active`, `completed`, `cancelled`,
+`expired`) and `instrument_id`. Latest quotes filter by `instrument_id`. Trigger events filter by
+`tracking_run_id` and `instrument_id`. Decimal outputs are JSON strings.
+
+A run with `admitted_at` null is waiting for a monitoring slot. A `prepared` run with `admitted_at` set is
+monitored but has no reference yet; its reference fields stay null rather than holding an invented price.
+`price_coverage` is `partial` for polled runs. Quotes report `quoted_at` (provider market time) separately from
+`received_at`. Events report `evidence_kind` (`price_quote` or `webhook`), the threshold, the observed price
+and `evidence_quality`. Polled hits are `coarse`: `occurred_at` is the time of the quote that first showed the
+level reached, not the moment the price touched it.
+
+Cancellation turns a `prepared` or `active` run into `cancelled` and frees its slot. Repeating it returns the
+same run. A `completed` or `expired` run returns 409 `tracking_run_closed`; an unknown ID returns 404
+`tracking_run_not_found`. There is no reopen operation. A later eligible observation creates a new run.
+
+No detected hit does not prove that the price never touched a level between two polls, after the last poll of
+a session or in data the provider published late. Do not report silence as a verified non-hit.
 
 ## Diagnostic identifiers
 

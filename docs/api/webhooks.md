@@ -9,8 +9,12 @@ code `tradingview` must be registered first; a missing source returns 503 withou
 attempt count and a safe error code. It does not expose the stored message or database credentials.
 
 This is a functioning local receiver and processor, tested with synthetic mappings. It is not a validated
-live TradingView integration. Tracking-run creation and alert provisioning are separate workflows and
-remain pending. Receiving a webhook does not create an alert or a tracking run.
+live TradingView integration. Alert provisioning remains pending and external webhooks are deferred while
+quote polling is piloted. Receiving a webhook does not create an alert or a tracking run. A trigger event is
+supported by exactly one piece of evidence, a webhook receipt or a polled price quote. When a webhook reports
+an earlier supported occurrence for a level first observed by polling, the processor replaces the quote
+evidence with the receipt in the same statement. Levels created by polling have no alert source, so a webhook
+cannot map to them until an alert is configured deliberately.
 
 ## Message contract
 

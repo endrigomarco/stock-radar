@@ -29,6 +29,41 @@ No official public alert-creation API has been confirmed. Manual configuration i
 Do not assume external API headers or HMAC signatures are supported. Test real sender behavior before
 choosing authentication. Review delivery failures and duplication, not just one successful notification.
 
+## brapi quotes
+
+Documentation read on 2026-10-08; no quote request was made by this project. The user reported HTTP 200 for
+PETR4 and WEGE3 in the free dashboard. Requests from the Docker container remain unverified.
+
+The [quote endpoint](https://brapi.dev/docs/acoes) is `GET /api/quote/{ticker}` with
+`Authorization: Bearer <token>`. The client reads `symbol`, `currency`, `regularMarketPrice` and
+`regularMarketTime` (ISO 8601 UTC) from the single result and ignores every other field. The documentation
+also allows a `token` query parameter; this project never uses it, so the key stays out of URLs.
+The [free plan](https://brapi.dev/pricing) lists one ticker per request, 15,000 requests per month, data
+refreshed every 30 minutes and one simultaneous request. Thirty instruments polled in 14 slots per session
+use roughly 8,800 requests in a month of 21 sessions. Calls are sequential with a 10 second timeout,
+redirects are refused and responses above 1 MiB are rejected. Plan limits and delays can change; verify them
+in the account before live use.
+
+Symbols are sent as stored, without the exchange prefix, and must be 1 to 12 uppercase letters or digits.
+An instrument brapi does not know fails on every cycle and keeps its slot until its run is cancelled.
+
+## B3 calendar and hours
+
+`src/stock_radar/market_calendar.py` holds a static calendar read from B3 on 2026-10-08: the
+[trading calendar](https://www.b3.com.br/pt_br/solucoes/plataformas/puma-trading-system/para-participantes-e-traders/calendario-de-negociacao/feriados/)
+and the [equities trading hours](https://www.b3.com.br/pt_br/solucoes/plataformas/puma-trading-system/para-participantes-e-traders/horario-de-negociacao/acoes/).
+For 2026 there is no equities session on 1 January, 16 and 17 February, 3 and 21 April, 1 May, 4 June,
+7 September, 12 October, 2 and 20 November, 24, 25 and 31 December, and trading starts at 13:00 on
+18 February. A session runs from 10:00 to 17:00 America/Sao_Paulo, the end of the closing call.
+
+Two limits apply. B3 had not published 2027 on that date, so no 2027 calendar is versioned: runs whose
+20 sessions would cross into 2027 (activation from early December 2026) stay prepared, and polling stops
+entirely in 2027 until the calendar is added. The hours page states no validity period and B3 usually
+changes hours around the United States daylight saving transitions. The single 2026 hours entry is therefore
+confirmed only for the published grid; add a dated `TradingHours` entry when B3 announces a change. Until
+then a later close would only shorten observation: polling stops at 17:00 and quotes timed after it are
+rejected with a warning. Nothing consults a calendar service or a model at runtime.
+
 ## Claude Cowork and plugin
 
 The [Cowork overview](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork)

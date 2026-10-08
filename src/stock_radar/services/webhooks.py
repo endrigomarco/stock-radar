@@ -84,6 +84,7 @@ class WebhookService:
             self.session.execute(statement.on_conflict_do_update(
                 index_elements=[TriggerEvent.trigger_level_id],
                 set_={"webhook_receipt_id": statement.excluded.webhook_receipt_id,
+                      "price_quote_id": None,
                       "occurred_at": statement.excluded.occurred_at,
                       "observed_price": statement.excluded.observed_price,
                       "evidence_quality": statement.excluded.evidence_quality},

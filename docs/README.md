@@ -22,5 +22,6 @@ These documents distinguish the implemented local backend foundation from planne
 | [Operations](operations.md) | VPS deployment direction, recovery and costs |
 | [Roadmap](roadmap.md) | Ordered increments and acceptance criteria |
 | [Git workflow](git-workflow.md) | Change and release discipline |
+| [Commit message generator](commit-message-generator.md) | On-demand commit subjects based on actual changes |
 
 Update the owning document with a behavior change. Avoid copying status narratives into agent rules.

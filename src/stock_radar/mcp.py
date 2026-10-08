@@ -18,9 +18,11 @@ from stock_radar.services.collections import CollectionService, SignalService
 from stock_radar.services.errors import ServiceError
 from stock_radar.services.sources import SourceService
 from stock_radar.services.status import StatusService
+from stock_radar.services.tracking import TrackingService
 from stock_radar.viewmodels.collections import CollectionInput, CollectionOutput, SignalPage, SignalQuery
 from stock_radar.viewmodels.sources import SourceInput, SourceListInput, SourceListOutput, SourceOutput
 from stock_radar.viewmodels.status import QualityOutput, QualityQuery, StatusOutput
+from stock_radar.viewmodels.tracking import LatestQuoteQuery, QuotePage, TrackingRunOutput, TrackingRunPage, TrackingRunQuery, TriggerEventPage, TriggerEventQuery
 
 
 def create_mcp(app) -> MCPServer:
@@ -93,5 +95,21 @@ def create_mcp(app) -> MCPServer:
     @server.tool(description="Count incomplete observations and failed or partial collections in a bounded window. Does not assess price coverage or missing scheduled collections.", annotations=read)
     async def data_quality_report(query: QualityQuery, ctx: Context) -> QualityOutput:
         return await invoke(ctx, "data_quality_report", lambda session: StatusService(session).quality(query))
+
+    @server.tool(description="List tracking runs with lifecycle, admission, immutable reference and level counts. Polling coverage is partial.", annotations=read)
+    async def list_tracking_runs(query: TrackingRunQuery, ctx: Context) -> TrackingRunPage:
+        return await invoke(ctx, "list_tracking_runs", lambda session: TrackingService(session).list_runs(query))
+
+    @server.tool(description="List the latest accepted price quote per instrument, with market time and receipt time.", annotations=read)
+    async def list_latest_quotes(query: LatestQuoteQuery, ctx: Context) -> QuotePage:
+        return await invoke(ctx, "list_latest_quotes", lambda session: TrackingService(session).list_latest_quotes(query))
+
+    @server.tool(description="List first observed threshold hits. A missing hit does not prove the price never touched the level between polls.", annotations=read)
+    async def list_trigger_events(query: TriggerEventQuery, ctx: Context) -> TriggerEventPage:
+        return await invoke(ctx, "list_trigger_events", lambda session: TrackingService(session).list_events(query))
+
+    @server.tool(description="Cancel an open tracking run idempotently and free its monitoring slot. Requires collector access.", annotations=write)
+    async def cancel_tracking_run(tracking_run_id: UUID, ctx: Context) -> TrackingRunOutput:
+        return await invoke(ctx, "cancel_tracking_run", lambda session: TrackingService(session).cancel(tracking_run_id), True)
 
     return server

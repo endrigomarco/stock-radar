@@ -7,11 +7,45 @@ Selection: daily price change below zero and analyst rating Strong Buy (`Viés d
 Store source labels as well as normalized values. Missing, neutral and technical ratings do not qualify.
 Thresholds: +1%, +2%, +3%, -1%, -2%, -3%, each relative to one immutable reference price per tracking run.
 
-## Proposed defaults, not yet activated
+## Active rules for the polling pilot
 
-Collect after the regular session. Start monitoring at the next session's opening, with checkpoints at
-1, 5 and 20 trading sessions. These were discussed as defaults, not validated operating rules.
-Before implementation, choose a source for the reference trade and define activation timing. Manually
+These rules are implemented for experiment `tradingview_losers_strong_buy`, version 1, and replace the earlier
+proposal of separate daily tracking runs.
+
+- One open tracking run per instrument and experiment, across versions. A new eligible observation is stored
+  and reuses the `prepared` or `active` run; it never resets reference, window or levels. A run is created only
+  together with its origin observation, so a consumed observation cannot create another run.
+- At most `MONITOR_MAX_INSTRUMENTS` distinct instruments (default 30) are monitored. Other runs wait and are
+  admitted oldest first when a slot frees. Runs created by the same collection share a creation time and are
+  ordered arbitrarily among themselves.
+- Reference: the first accepted brapi quote received after admission whose market time is inside a valid B3
+  session and not earlier than the origin observation. Until then the run stays `prepared` with no reference.
+  The reference never changes afterwards.
+- Window: 20 B3 sessions including the activation session, read from the experiment version. It ends at the
+  close of the 20th session. If the versioned calendar does not cover all 20 sessions the run is not activated.
+- A level is reached when the quote price is greater than or equal to a positive threshold, or less than or
+  equal to a negative one. Thresholds are `reference * (1 + percent / 100)` in Decimal. Only our reference is
+  used; provider change percentages and daily highs or lows are ignored.
+- Only the first observed hit of each level is recorded. One quote may reach several levels.
+- A run ends as `completed` when all six levels were hit, `expired` after its window, or `cancelled`.
+
+A quote may activate a run or produce a hit only when its market time is inside a session of the versioned
+calendar, is at most 2 minutes ahead of the receipt time and is at most 60 minutes old at receipt. The free
+brapi plan refreshes about every 30 minutes, hence the 60 minute limit. Quotes failing these rules are rejected
+before persistence and logged, so a defective timestamp cannot block later quotes. Hits additionally require
+a market time after activation and not after the window close. The window is always evaluated with the quote's
+market time, never the receipt time. A quote whose market time is not newer than the last accepted one for
+the instrument is ignored. Equal prices with a newer market time are valid observations.
+
+Polling stops strictly at the session close. No extra collection runs after the close and there is no
+reconciliation, so the last minutes of every session, the closing call and anything the provider publishes
+late, including on the final session of a window, can be missed. Every polled run has `price_coverage` set to
+`partial`. No detected hit is not proof that the price never touched a level between polls.
+
+## Earlier proposals for manual alerts
+
+The following text predates the polling pilot and applies only to a possible manual-alert variant. Collection
+after the regular session and checkpoints at 1 and 5 sessions were discussed, not validated. Manually
 creating alerts after opening leaves a gap: do not backdate coverage to the opening unless an independent
 price history covers that interval. For a manual pilot, an explicitly timestamped activation price may
 be more reproducible; this changes the experiment and needs its own version.
@@ -29,8 +63,8 @@ Record each threshold's first supported occurrence; one hit does not stop the ot
 Order by trustworthy market/event evidence, not network arrival. Ties, coarse timestamps or two-sided
 hits in one candle without finer evidence are indeterminate.
 
-Keep daily tracking runs separate, but deduplicate retries of the same run creation. Overlapping runs
-for one asset are correlated; report both run count and distinct asset count.
+Reuse the open tracking run of an instrument instead of creating daily runs. Successive runs of one asset,
+created after an earlier run ended, are still correlated; report both run count and distinct asset count.
 Corporate actions can make raw changes misleading. Identify affected runs and exclude or mark them
 unresolved until a documented adjustment policy and supporting data exist.
 

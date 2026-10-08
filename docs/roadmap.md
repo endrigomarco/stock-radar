@@ -32,9 +32,18 @@ No tracking engine, webhook receiver or full analytical tool catalog is required
 
 Durable webhook receipt, deduplication, mapping validation and first-event processing are implemented
 against existing schema records. Tracking creation with a versioned experiment, immutable reference and
-six levels remains pending. Use synthetic messages. Acceptance: retries cannot create duplicate runs or hits; unmapped events
+six levels is implemented by the quote polling increment below. Use synthetic messages. Acceptance: retries cannot create duplicate runs or hits; unmapped events
 remain identifiable; committed pending receipts survive restart; network arrival order does not substitute
 for event evidence. Select only the session/reference rules needed by this increment.
+
+## 3a. brapi quote polling (implemented locally, live provider unverified)
+
+Eligible observations create or reuse one open tracking run per instrument and experiment. A single Docker
+process polls brapi every 30 minutes during B3 sessions for at most 30 instruments, locks the reference at
+the first valid quote, creates six levels, records first observed hits and ends runs by completion, expiry
+or cancellation. REST and MCP expose runs, latest quotes, hits and cancellation. Validated with a fake
+provider and disposable PostgreSQL only. Pending: a first authorized live cycle from the container, the 2027
+calendar, confirmation of B3 hours after the next change, and deployment. External webhooks are deferred.
 
 ## 4. MCP and plugin connection
 
@@ -55,8 +64,8 @@ restore and the existing VPS workloads before relying on unattended operation.
 
 Configure daily scheduling for the agreed time and market sessions. The user wants daily collection;
 exact scheduling and missed-run handling still need configuration. Collect mature cohorts and distinguish
-observed notification counts from metrics that require independently verified coverage. Add a price source
-when needed for reconciliation, fixed-horizon returns and excursion metrics.
+observed notification counts from metrics that require independently verified coverage. Polled quotes give
+partial coverage only; add price history when needed for reconciliation, fixed-horizon returns and excursion metrics.
 
 ## Deferred
 
