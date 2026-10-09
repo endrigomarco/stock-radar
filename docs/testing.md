@@ -188,3 +188,43 @@ the archive root and the same nine files as the distributable content of `plugin
 `claude plugin validate ./plugin`; `git diff --check`. `make test` was not rerun because no application code
 changed. Not validated, as before: installation, skill discovery and any MCP call in Cowork. The 0.2.0
 archive no longer matches `plugin/`.
+
+## Plugin connection increment
+
+Tested by the owner in Cowork on the MacBook Pro, reported on 2026-10-09 for version 0.2.1: the plugin was
+installed and enabled, the interface recognized its nine files and four skills, and `check-status` stated
+that the MCP tools were absent, without claiming backend access or changed records. This validates
+installation and the behaviour without a connection. It does not validate connectivity.
+
+Checked on the development machine on 2026-10-09 for version 0.3.0, outside any Claude client:
+
+- `make sandbox-up` created an isolated Compose project on `127.0.0.1:18001` after confirming the port was
+  free, migrated and provisioned only that database and left the monitor stopped.
+- `mcp-remote@0.14.3`, started through `npx` with the header placeholder and the sandbox reader token in
+  its environment, was driven over stdio: `initialize` answered, `tools/list` returned the 11 tools,
+  `service_status` returned the version and capabilities, and `register_source` returned `forbidden`.
+- With the sandbox collector token in the environment, the same proxy registered a synthetic source, sent
+  the packaged example with that source `id` and a `client_collection_id` generated once, received a receipt
+  with `duplicate: false`, read it back with `get_collection` and received `duplicate: true` with the same
+  `id` for the identical repeat.
+- The proxy log named the header and did not contain the token.
+- With a wrong token the proxy probed the same loopback service for OAuth, received 404 and exited. No
+  browser opened and no external request was made.
+- A request with a foreign Host header received 421 and a request without a token received 401.
+- With `COMPOSE_PROJECT_NAME`, `API_PORT` and `MONITOR_ENABLED` set to conflicting values in the terminal
+  and on the `make` command line, `make sandbox-up`, `sandbox-down` and `sandbox-destroy` created, stopped
+  and removed only `stock-radar-sandbox` resources on port 18001, with no monitor container. No other
+  container changed.
+- `make sandbox-token` was run against a recording stand-in for the `security` command: the recorded
+  arguments were `-i` and the read-back query, with no token, and the token arrived on standard input.
+  The same standard-input form was confirmed to write and update an item in a throwaway keychain file.
+  The login Keychain was not modified.
+- `plugin/mcp/bridge.sh` exited with a clear message when the Keychain item was absent.
+- `claude --plugin-dir ./plugin mcp list` resolved `${CLAUDE_PLUGIN_ROOT}`, started the launcher and showed
+  the server as failed, as expected without the Keychain item. This is Claude Code, not Cowork.
+- `make package`, `claude plugin validate ./plugin` and `git diff --check`.
+
+Not validated: `make sandbox-token` writing to the login Keychain and the launcher reading it back, since
+no item was created in the login Keychain of the development machine; the bridge started by the Claude desktop app; any MCP call from Cowork; the synthetic
+collection with receipt and idempotent repeat from Cowork; scheduling; any VPS operation. `make test` was
+not rerun because no application code changed. The owner's steps are listed in [plugin](plugin.md).

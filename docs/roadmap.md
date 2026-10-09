@@ -48,8 +48,9 @@ calendar, confirmation of B3 hours after the next change, and deployment. Extern
 ## 4. MCP and plugin connection
 
 The local read tools and authorized ingestion path exist. The plugin package for collection is prepared
-(version 0.2.1) with no bundled connector. Cowork connection and plugin authentication remain unverified,
-and the connection path is undecided; see [plugin](plugin.md). Connect the plugin to an authorized test service.
+(version 0.3.0) with a bundled local bridge to a disposable sandbox on the same computer. Installation and
+skill discovery in Cowork were confirmed by the owner for 0.2.1. The connection from Cowork remains
+unverified; see [plugin](plugin.md). Connect the plugin to an authorized test service.
 Acceptance: Cowork submits a synthetic list, reads it back and explains stored events with coverage limits.
 Missing tools and failed writes are reported accurately. Validate the actual distributable plugin and
 its authentication. Add aggregate and comparison tools incrementally when their inputs are available.

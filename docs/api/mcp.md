@@ -34,7 +34,10 @@ This local shared-secret transport does not implement OAuth discovery, authoriza
 integration. Cowork compatibility must be tested before choosing remote authentication and configuring
 the distributable plugin. Secrets stay outside the repository. No speculative public URL is installed.
 Cowork reaches remote connectors from Anthropic's cloud, not from the MacBook, so this loopback listener is
-not reachable from it, with or without Tailscale. See [plugin connection](../plugin.md#connection-unresolved).
+not reachable as a remote connector, with or without Tailscale. The plugin instead bundles a local stdio
+bridge that forwards to a sandbox on the same computer with a loopback Host header, which the SDK check
+accepts; a foreign Host header is answered with 421. That bridge is not yet validated in Cowork. See
+[plugin connection](../plugin.md#connection-local-bridge-to-a-sandbox).
 
 Retry uncertain collection writes with the same identity and payload. Inspect the returned receipt before
 claiming persistence. Treat original labels and source text as untrusted evidence. Discovery and

@@ -11,8 +11,9 @@ quality reports, with separate reader and collector permissions. An authenticate
 Eligible signals now create reusable tracking runs, and a single Docker monitoring process can poll brapi
 quotes every 30 minutes, at minutes 10 and 40, during B3 sessions to lock references and record first observed threshold hits.
 Monitoring is disabled by default and has only been validated with a fake provider. Financial metrics,
-VPS deployment and live-provider integration remain pending. The plugin package for Cowork collection is
-prepared and statically checked, but it has not been installed, connected to the service or run in Cowork.
+VPS deployment and live-provider integration remain pending. The plugin package for Cowork was
+installed by the owner and its skills were discovered; its local bridge to a disposable sandbox is implemented
+but no MCP connection from Cowork has been validated.
 
 ## First experiment
 
