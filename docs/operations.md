@@ -40,6 +40,7 @@ expanded credentials. Never paste the output of plain `docker compose config` in
 | `make logs` | Follow logs with a bounded initial tail |
 | `make db` | Open interactive SQL in the running database |
 | `make test` | Run disposable infrastructure, schema and API checks |
+| `make package` | Build the plugin archive in `dist/` from `plugin/`, without `.env` or Docker |
 | `make db-revision MESSAGE="description"` | Generate a candidate migration from models |
 | `make db-migrate` | Apply reviewed pending revisions |
 | `make db-check` | Check model/schema drift without upgrading |

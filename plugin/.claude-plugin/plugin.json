@@ -1,14 +1,15 @@
 {
   "name": "stock-radar",
-  "version": "0.1.0",
-  "description": "Instruction scaffold for collecting stock signals, preparing trigger tracking, and analyzing outcomes through a future Stock Radar service.",
+  "displayName": "Stock Radar",
+  "version": "0.2.1",
+  "description": "Collect the daily TradingView list of Brazilian biggest losers with analyst ratings from the user's Chrome and register it in the Stock Radar service through its MCP tools. Includes read-only status and evidence skills. The Stock Radar connector is configured separately and is not bundled.",
   "author": {
     "name": "Endrigo Marco"
   },
   "keywords": [
     "stocks",
     "signals",
-    "analysis",
-    "webhooks"
+    "collection",
+    "tradingview"
   ]
 }

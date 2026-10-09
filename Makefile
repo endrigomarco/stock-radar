@@ -6,7 +6,7 @@ COMPOSE = docker compose --env-file "$(ENV_FILE)"
 
 export ERROR_LOOKUP_ID = $(ID)
 
-.PHONY: errors webhooks-process monitor-once help config build up down status logs db test uv db-revision db-migrate db-check db-access
+.PHONY: errors webhooks-process monitor-once help config build up down status logs db test uv db-revision db-migrate db-check db-access package
 
 help: ## Show the available commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  make %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -35,6 +35,9 @@ db: ## Open psql inside the running database container
 
 test: ## Test infrastructure, schema, REST and MCP in a disposable project
 	@sh scripts/test-infra.sh
+
+package: ## Build dist/stock-radar-VERSION.zip from plugin/, without .env or Docker
+	@sh scripts/package-plugin.sh
 
 uv: ## Run uv in Docker, e.g. make uv ARGS="lock"
 	docker build --target tooling --tag stock-radar-tooling:local .

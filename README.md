@@ -11,8 +11,8 @@ quality reports, with separate reader and collector permissions. An authenticate
 Eligible signals now create reusable tracking runs, and a single Docker monitoring process can poll brapi
 quotes every 30 minutes, at minutes 10 and 40, during B3 sessions to lock references and record first observed threshold hits.
 Monitoring is disabled by default and has only been validated with a fake provider. Financial metrics,
-VPS deployment and live-provider integration remain pending. The plugin is an instruction scaffold and
-has not been connected to Cowork.
+VPS deployment and live-provider integration remain pending. The plugin package for Cowork collection is
+prepared and statically checked, but it has not been installed, connected to the service or run in Cowork.
 
 ## First experiment
 
@@ -26,7 +26,7 @@ separate signal types.
 
 ```text
 MacBook Pro: Claude Cowork + Stock Radar plugin
-  browser observations -> authenticated ingestion API
+  browser observations -> authenticated MCP tools
   analysis requests    -> authenticated MCP tools
                                    |
 VPS, running continuously           v
@@ -78,7 +78,7 @@ make db-access
 make up
 ```
 
-`make help` lists the supported commands. `make build` builds Python and database tooling; `make test`
+`make help` lists the supported commands. `make package` builds the plugin archive in `dist/` without `.env` or Docker; see [plugin](docs/plugin.md). `make build` builds Python and database tooling; `make test`
 checks the schema, infrastructure and API against a disposable database without requiring `.env`. `make down` preserves local data.
 PostgreSQL has no published host port; use `make db` for SQL access. The initial schema supports multiple sources and versioned experiments. The code-first workflow is described in
 [database design](docs/database.md). See [operations](docs/operations.md) for environment selection and VPS boundaries.

@@ -33,6 +33,8 @@ allowlist and ingress/authentication design, not disabling transport security gl
 This local shared-secret transport does not implement OAuth discovery, authorization flows or account
 integration. Cowork compatibility must be tested before choosing remote authentication and configuring
 the distributable plugin. Secrets stay outside the repository. No speculative public URL is installed.
+Cowork reaches remote connectors from Anthropic's cloud, not from the MacBook, so this loopback listener is
+not reachable from it, with or without Tailscale. See [plugin connection](../plugin.md#connection-unresolved).
 
 Retry uncertain collection writes with the same identity and payload. Inspect the returned receipt before
 claiming persistence. Treat original labels and source text as untrusted evidence. Discovery and

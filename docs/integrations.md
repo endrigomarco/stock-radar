@@ -75,6 +75,20 @@ The [plugin manifest reference](https://code.claude.com/docs/en/plugins-referenc
 claim of Cowork installation compatibility. Verify discovery, packaged references and remote MCP
 authentication in Cowork. No account connection or daily schedule exists yet.
 
+Documentation read on 2026-10-09, without any installation or connection attempt. The
+[plugins overview](https://claude.com/docs/plugins/overview) and
+[support by app](https://claude.com/docs/plugins/platform-support) state that Cowork loads skills, accepts an
+uploaded `.zip` or `.plugin` archive, refuses a plugin with a top-level `bin/` directory and does not prompt
+for `${user_config.*}` values. The
+[custom connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
+states that remote connectors are contacted from Anthropic's cloud in every client, so the server must be
+publicly reachable and a VPN-only address does not connect. Tailscale on the MacBook therefore does not make
+the VPS reachable as a remote connector. Local MCP servers are documented as loading in Cowork sessions that
+run on the user's computer; reachability of the tailnet from one is untested.
+[Scheduled tasks](https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-claude-cowork)
+run remotely unless they need local files or apps; driving Chrome from a scheduled run is not documented.
+The consequences and the open decision are in [plugin](plugin.md).
+
 ## Pilot evidence to capture
 
 - Source/account context and completeness of the analyst-rating table.

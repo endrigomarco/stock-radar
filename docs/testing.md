@@ -169,3 +169,22 @@ checked against B3 pages by reading, not by an automated test. No coverage gate 
 
 Validated on 2026-10-09: the complete disposable Docker suite passed after the schedule moved to minutes 10
 and 40. Not validated: the sleeping loop itself over real time, any real brapi request and VPS operation.
+
+## Plugin package increment
+
+Checked on 2026-10-09 for plugin version 0.2.0: `claude plugin validate ./plugin`, JSON parsing of the
+manifest and the synthetic example, skill names against their folders, description lengths, relative links
+inside `plugin/`, the absence of em dashes and secret-like strings, and the archive layout. The synthetic
+example was validated against the real `CollectionInput` model in the Docker runtime image, without a
+database. `make test` was not rerun because no application code changed.
+
+Not validated: installation or skill discovery in Cowork, reading the real TradingView table, the access
+pause, any MCP call from Cowork, a real `register_collection` write and scheduling. These need the pending
+items in [plugin](plugin.md) and must not be inferred from the static checks.
+
+Checked on 2026-10-09 for plugin version 0.2.1, after adding `make package` and correcting the
+`prepare-triggers` description: `make package` produced `dist/stock-radar-0.2.1.zip` with the manifest at
+the archive root and the same nine files as the distributable content of `plugin/`, each byte-identical;
+`claude plugin validate ./plugin`; `git diff --check`. `make test` was not rerun because no application code
+changed. Not validated, as before: installation, skill discovery and any MCP call in Cowork. The 0.2.0
+archive no longer matches `plugin/`.
