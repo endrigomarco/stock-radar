@@ -162,8 +162,11 @@ Setup on a database you are allowed to change:
 4. Continuous operation: `docker compose --env-file .env up --detach monitor`. Stop it with
    `docker compose --env-file .env stop monitor`; `make down` also stops it.
 
-The continuous process wakes at each half hour, never immediately at startup, so a restart cannot burst
-requests. A session-level advisory lock ensures one cycle at a time across the service and the manual command.
+The continuous process wakes at minutes 10 and 40 of every hour (five seconds past, as a wake-up margin),
+never immediately at startup, so a restart cannot burst requests. The times are fixed wall-clock slots, not
+30 minutes after the previous cycle ends, and a slot missed while the process was down is not recovered. In a
+session opening at 10:00 the cycles run at 10:10, 10:40, 11:10 and so on, which leaves the provider ten
+minutes after the open to publish a quote from the current session. A session-level advisory lock ensures one cycle at a time across the service and the manual command.
 Each cycle first expires runs whose window ended, even when the market is closed or the provider is down.
 Outside a B3 session, or in a year without a versioned calendar, it makes no external call and logs
 `market_closed` in the cycle summary for a known closure, or `calendar_unavailable` with a warning of the

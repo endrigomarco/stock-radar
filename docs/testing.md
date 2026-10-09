@@ -142,7 +142,9 @@ lookup command retrieved it by its original request ID.
 ## Quote monitoring increment
 
 `tests/check_monitoring.py` drives the real monitoring cycle against PostgreSQL through the restricted monitor
-role, with a fake provider and an injected clock. It never calls brapi. It covers repeated indications reusing
+role, with a fake provider and an injected clock. It never calls brapi. It checks the next
+wake-up computed from a controlled instant before, at and after minutes 10 and 40, across the hour and the
+day. It covers repeated indications reusing
 one run, a concurrent creation race across two experiment versions, the capacity limit and oldest-first
 admission, cancellation (idempotent, permission-checked, freeing a slot), activation only from a quote not
 earlier than the origin observation, the immutable reference and the 20 session expiry computed across a
@@ -161,6 +163,9 @@ status with a level, a receipt and an event, then applies the new revision and v
 checks the new constraints, the refusal to downgrade over polling evidence and a clean downgrade afterwards.
 
 Validated on 2026-10-08: the complete disposable Docker suite passed. Not validated: any real brapi request,
-the provider's actual delay and timestamp behavior, the continuous process over real half-hour slots,
+the provider's actual delay and timestamp behavior, the continuous process over real 10 and 40 minute slots,
 the migration on the development or any persistent database, and VPS operation. The calendar and hours were
 checked against B3 pages by reading, not by an automated test. No coverage gate is introduced.
+
+Validated on 2026-10-09: the complete disposable Docker suite passed after the schedule moved to minutes 10
+and 40. Not validated: the sleeping loop itself over real time, any real brapi request and VPS operation.

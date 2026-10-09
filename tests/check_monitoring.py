@@ -15,7 +15,7 @@ from stock_radar import brapi
 from stock_radar.app import create_app
 from stock_radar.db.config import database_url
 from stock_radar.db.models import Experiment, ExperimentVersion, Instrument, PriceQuote, SignalObservation, TrackingRun, TriggerEvent, TriggerLevel
-from stock_radar.monitor import run_cycle
+from stock_radar.monitor import run_cycle, seconds_until_next_slot
 from stock_radar.observability.telemetry import Telemetry
 from stock_radar.services.tracking import EXPERIMENT_CODE, TrackingService
 from stock_radar.settings import MonitorSettings, Settings
@@ -53,6 +53,25 @@ class Clock:
 
     def __call__(self) -> datetime:
         return self.now
+
+
+def check_schedule() -> None:
+    def next_slot(hour: int, minute: int, second: int = 0) -> str:
+        now = at(3, 16, hour, minute).timestamp() + second
+        wake = datetime.fromtimestamp(now + seconds_until_next_slot(now), SAO_PAULO)
+        assert 0 < wake.timestamp() - now <= 1800
+        return wake.strftime("%d %H:%M:%S")
+
+    expected = {
+        (9, 0): "16 09:10:05", (9, 59, 59): "16 10:10:05", (10, 0): "16 10:10:05", (10, 9, 59): "16 10:10:05",
+        (10, 10): "16 10:10:05", (10, 10, 4): "16 10:10:05", (10, 10, 5): "16 10:40:05", (10, 10, 6): "16 10:40:05",
+        (10, 30): "16 10:40:05", (10, 39, 59): "16 10:40:05", (10, 40): "16 10:40:05", (10, 40, 5): "16 11:10:05",
+        (10, 41): "16 11:10:05", (10, 59, 59): "16 11:10:05", (11, 0): "16 11:10:05", (11, 10, 5): "16 11:40:05",
+        (16, 40, 5): "16 17:10:05", (23, 40, 5): "17 00:10:05", (23, 59, 59): "17 00:10:05",
+    }
+    for moment, wake in expected.items():
+        assert next_slot(*moment) == wake, (moment, next_slot(*moment), wake)
+    assert seconds_until_next_slot(at(3, 16, 10, 10).timestamp() + 5.25) == 1799.75
 
 
 def check_provider_contract() -> None:
@@ -108,6 +127,7 @@ def check_provider_contract() -> None:
 
 
 def main() -> None:
+    check_schedule()
     check_provider_contract()
     settings = Settings.from_environment()
     admin = create_engine(database_url())
@@ -331,7 +351,7 @@ def main() -> None:
                 raise AssertionError("Role exceeded its database grants")
         engine.dispose()
     admin.dispose()
-    print("Monitoring checks passed: reuse, capacity, activation, immutability, temporal validation, hits, idempotency, expiry, calendar, cancellation, provider failures and webhook compatibility.")
+    print("Monitoring checks passed: schedule, reuse, capacity, activation, immutability, temporal validation, hits, idempotency, expiry, calendar, cancellation, provider failures and webhook compatibility.")
 
 
 if __name__ == "__main__":

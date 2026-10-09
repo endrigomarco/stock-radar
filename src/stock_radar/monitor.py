@@ -19,7 +19,9 @@ from stock_radar.settings import MonitorSettings, monitor_enabled
 CYCLE_LOCK_KEY = "stock_radar:monitor_cycle"
 STALE_CYCLES = 5
 SLOT_SECONDS = POLL_INTERVAL_MINUTES * 60
+SLOT_FIRST_MINUTE = 10
 SLOT_OFFSET_SECONDS = 5
+SLOT_PHASE_SECONDS = SLOT_FIRST_MINUTE * 60 + SLOT_OFFSET_SECONDS
 IDLE_SECONDS = 3600
 INFORMATIONAL_REJECTIONS = {"quote_too_old"}
 SESSION_OPEN = "open"
@@ -104,7 +106,7 @@ def _session_state(instant: datetime) -> str:
 
 
 def seconds_until_next_slot(now: float) -> float:
-    return SLOT_SECONDS - (now % SLOT_SECONDS) + SLOT_OFFSET_SECONDS
+    return SLOT_SECONDS - (now - SLOT_PHASE_SECONDS) % SLOT_SECONDS
 
 
 def run(telemetry: Telemetry) -> None:

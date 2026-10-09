@@ -9,7 +9,7 @@ Docker. Eleven normalized tables use random UUID primary keys and Alembic migrat
 official MCP SDK share services for sources, atomic collection ingestion, signal queries, status and
 quality reports, with separate reader and collector permissions. An authenticated webhook inbox deduplicates notifications and processes existing alert mappings.
 Eligible signals now create reusable tracking runs, and a single Docker monitoring process can poll brapi
-quotes every 30 minutes during B3 sessions to lock references and record first observed threshold hits.
+quotes every 30 minutes, at minutes 10 and 40, during B3 sessions to lock references and record first observed threshold hits.
 Monitoring is disabled by default and has only been validated with a fake provider. Financial metrics,
 VPS deployment and live-provider integration remain pending. The plugin is an instruction scaffold and
 has not been connected to Cowork.
