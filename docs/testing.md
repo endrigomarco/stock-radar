@@ -196,6 +196,10 @@ installed and enabled, the interface recognized its nine files and four skills, 
 that the MCP tools were absent, without claiming backend access or changed records. This validates
 installation and the behaviour without a connection. It does not validate connectivity.
 
+The checks below describe the local bridge and sandbox of version 0.3.0. That solution was retired in
+0.4.0 and its scripts no longer exist; the record is kept as history and none of it applies to the current
+package.
+
 Checked on the development machine on 2026-10-09 for version 0.3.0, outside any Claude client:
 
 - `make sandbox-up` created an isolated Compose project on `127.0.0.1:18001` after confirming the port was
@@ -227,4 +231,29 @@ Checked on the development machine on 2026-10-09 for version 0.3.0, outside any 
 Not validated: `make sandbox-token` writing to the login Keychain and the launcher reading it back, since
 no item was created in the login Keychain of the development machine; the bridge started by the Claude desktop app; any MCP call from Cowork; the synthetic
 collection with receipt and idempotent repeat from Cowork; scheduling; any VPS operation. `make test` was
-not rerun because no application code changed. The owner's steps are listed in [plugin](plugin.md).
+not rerun because no application code changed.
+
+## Removal of the local bridge
+
+Checked on 2026-10-09 for plugin version 0.4.0: the manifest has no `mcpServers` entry and the package
+holds no script, so installing it starts no local process; `make package` produced
+`dist/stock-radar-0.4.0.zip` with the nine distributable files of `plugin/`, each byte-identical, and no
+`mcp/` entry; `claude plugin validate ./plugin`; `git diff --check`. `make test` was not rerun because no
+application code changed. No sandbox resource, Keychain item or program was removed from any machine.
+
+Not validated: installation of 0.4.0 in Cowork, any MCP connection from Cowork and any VPS operation. The
+connection to the service on the VPS is pending; see [plugin](plugin.md).
+
+## MCP allowed hosts
+
+`tests/check_transport.py` builds the application with synthetic settings and no database and is part of
+`make test`. With one synthetic `host:port` in `MCP_ALLOWED_HOSTS` it checks that an authenticated
+`initialize` returns 200 for that Host and for loopback names; 421 for the same name without the port, with
+another port, for another name and for a name that only ends with the allowed one; 401 without a token or
+with a wrong token, whatever the Host; 403 for a non-loopback Origin and 200 for a loopback Origin. With
+the variable empty the same Host returns 421. Wildcards, schemes, spaces and more than eight entries are
+rejected at start.
+
+Validated on 2026-10-09: the complete disposable Docker suite passed with this check included. Not
+validated: the setting on the VPS, the Host value that Tailscale Serve actually forwards, and any request
+through the tailnet. The 421 that prompted the change was reported by the owner and not reproduced here.

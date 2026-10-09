@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -10,7 +11,7 @@ from stock_radar.controllers import collections, health, metrics, sources, statu
 from stock_radar.mcp import create_mcp
 from stock_radar.middleware import RequestBoundary
 from stock_radar.services.errors import ServiceError
-from stock_radar.settings import Settings
+from stock_radar.settings import MCP_LOCAL_ORIGINS, Settings
 
 from stock_radar.observability.logging import configure_logging, emit
 from stock_radar.observability.middleware import TelemetryBoundary, route_name
@@ -64,7 +65,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(tracking.router)
     app.include_router(webhooks.router)
     mcp = create_mcp(app)
-    app.mount("/", mcp.streamable_http_app(stateless_http=True, json_response=True))
+    transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=settings.mcp_hosts(),
+        allowed_origins=list(MCP_LOCAL_ORIGINS),
+    )
+    app.mount("/", mcp.streamable_http_app(stateless_http=True, json_response=True, transport_security=transport_security))
     app.add_middleware(RequestBoundary, settings=settings)
     app.add_middleware(TelemetryBoundary, telemetry=telemetry)
 

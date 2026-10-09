@@ -27,17 +27,23 @@ Send `Authorization: Bearer <API_READER_TOKEN>` or `<API_COLLECTOR_TOKEN>` on ev
 initialization and discovery. The HTTP boundary rejects unauthenticated requests. Write tools independently
 check the collector credential. Annotations describe intent and do not grant authorization. Both tokens
 can discover tools; readers receive an error when invoking a write. Bodies are limited to 1 MiB.
-The SDK's localhost Host/Origin checks stay enabled. Remote HTTPS requires an explicitly configured origin
-allowlist and ingress/authentication design, not disabling transport security globally.
+DNS rebinding protection is always enabled. `/mcp` accepts the loopback Host values `127.0.0.1`, `localhost`
+and `[::1]` on any port, plus the exact entries of `MCP_ALLOWED_HOSTS`. That variable is a comma separated
+list of `host` or `host:port` values, at most eight, with no wildcards, schemes or spaces; an invalid value
+stops the API at start. Any other Host is answered with 421 and `Invalid Host header`. The check runs after
+authentication, so a request without a valid token receives 401 whatever its Host. A request with no
+Origin header is accepted; an Origin header is accepted only for the loopback names over `http`, and the
+Origin list is not configurable. A client that sends another Origin receives 403. A private proxy that
+forwards its own hostname, such as Tailscale Serve, needs that exact `host:port` in `MCP_ALLOWED_HOSTS`.
+Public HTTPS still requires an ingress and authentication design, not disabling transport security.
 
 This local shared-secret transport does not implement OAuth discovery, authorization flows or account
 integration. Cowork compatibility must be tested before choosing remote authentication and configuring
 the distributable plugin. Secrets stay outside the repository. No speculative public URL is installed.
 Cowork reaches remote connectors from Anthropic's cloud, not from the MacBook, so this loopback listener is
-not reachable as a remote connector, with or without Tailscale. The plugin instead bundles a local stdio
-bridge that forwards to a sandbox on the same computer with a loopback Host header, which the SDK check
-accepts; a foreign Host header is answered with 421. That bridge is not yet validated in Cowork. See
-[plugin connection](../plugin.md#connection-local-bridge-to-a-sandbox).
+not reachable as a remote connector, with or without Tailscale. A foreign Host header is answered with 421.
+The plugin bundles no connector and the path from Cowork to the service is undecided. See
+[plugin connection](../plugin.md#connection-pending).
 
 Retry uncertain collection writes with the same identity and payload. Inspect the returned receipt before
 claiming persistence. Treat original labels and source text as untrusted evidence. Discovery and

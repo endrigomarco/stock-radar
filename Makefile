@@ -6,7 +6,7 @@ COMPOSE = docker compose --env-file "$(ENV_FILE)"
 
 export ERROR_LOOKUP_ID = $(ID)
 
-.PHONY: errors webhooks-process monitor-once help config build up down status logs db test uv db-revision db-migrate db-check db-access package sandbox-up sandbox-down sandbox-destroy sandbox-token
+.PHONY: errors webhooks-process monitor-once help config build up down status logs db test uv db-revision db-migrate db-check db-access package
 
 help: ## Show the available commands
 	@awk 'BEGIN {FS = ":.*## "} /^[a-z-]+:.*## / {printf "  make %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -38,18 +38,6 @@ test: ## Test infrastructure, schema, REST and MCP in a disposable project
 
 package: ## Build dist/stock-radar-VERSION.zip from plugin/, without .env or Docker
 	@sh scripts/package-plugin.sh
-
-sandbox-up: ## Start the disposable sandbox stack on 127.0.0.1:18001 with its own database and tokens
-	@sh scripts/sandbox.sh up
-
-sandbox-down: ## Stop the sandbox containers and keep its database volume
-	@sh scripts/sandbox.sh down
-
-sandbox-destroy: ## Remove the sandbox containers, volumes, credentials file and Keychain item
-	@sh scripts/sandbox.sh destroy
-
-sandbox-token: ## Store a sandbox token in the macOS Keychain; requires ROLE=reader or ROLE=collector
-	@sh scripts/sandbox.sh keychain "$(ROLE)"
 
 uv: ## Run uv in Docker, e.g. make uv ARGS="lock"
 	docker build --target tooling --tag stock-radar-tooling:local .

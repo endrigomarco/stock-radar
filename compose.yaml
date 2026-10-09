@@ -76,6 +76,7 @@ services:
       APP_POSTGRES_PASSWORD: ${APP_POSTGRES_PASSWORD:-}
       POSTGRES_DB: ${POSTGRES_DB:-stock_radar}
       POSTGRES_HOST: postgres
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
     volumes:
       - application_logs:/var/log/stock-radar
     ports:

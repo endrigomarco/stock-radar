@@ -5,17 +5,20 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.3.0, prepared on 2026-10-09 for collection by Claude Cowork on the MacBook Pro.
+Version 0.4.0, prepared on 2026-10-09 for Claude Cowork on the MacBook Pro.
 
 | State | Scope |
 |---|---|
-| Prepared in the repository | Manifest with a bundled local bridge, four skills with their references, `make package`, the disposable sandbox procedure |
-| Checked on the development machine | Manifest and archive checks; the pinned proxy driven over stdio against the sandbox, outside any Claude client and with the token taken from the environment instead of the Keychain: 11 tools listed, `service_status` answered, `register_source` refused with `forbidden` under the reader token |
+| Prepared in the repository | Manifest, four skills with their references, `make package` |
+| Checked statically | Manifest without local servers, archive contents, plugin validator |
 | Tested by the owner in Cowork on the MacBook Pro | Reported on 2026-10-09 for version 0.2.1: the plugin installed and was enabled, the interface listed its nine files and four skills, and `check-status` reported that the MCP tools were absent without claiming backend access or changed records |
-| Not validated | Any MCP connection from Cowork, the bridge started by the desktop app, the Keychain read in the launcher, a synthetic collection from Cowork, Chrome reading of the real table, scheduling, any VPS operation |
+| Not validated | Any MCP connection from Cowork, a synthetic collection from Cowork, Chrome reading of the real table, scheduling, any VPS operation |
 
 Installation and the behaviour without a connection are validated by the owner's test. Connectivity is not.
-A local check is not evidence that the bridge works in Cowork.
+
+Architecture decision by the owner: the backend and PostgreSQL run on the VPS. The MacBook Pro runs the
+Claude desktop app, Cowork and this plugin only. Using the plugin must not require Docker, Node.js, a local
+database or any start script on the MacBook. Docker remains the runtime for development and for the VPS.
 
 ## Skills
 
@@ -46,8 +49,7 @@ Format checked against the official documentation on 2026-10-09:
 [support by app](https://claude.com/docs/plugins/platform-support),
 [custom skills](https://claude.com/docs/skills/how-to).
 
-- Cowork loads skills, commands, agents, hooks and connectors from a plugin. This plugin uses skills and one
-  local MCP server.
+- Cowork loads skills, commands, agents, hooks and connectors from a plugin. This plugin uses skills only.
 - Upload accepts a folder archived as `.zip` or `.plugin` holding one `.claude-plugin/plugin.json`, either
   at the archive root or inside a single top-level folder. Limits are 200 MB and 5,000 files.
 - A top-level `bin/` directory blocks installation in Cowork. `${user_config.*}` values are not prompted
@@ -67,122 +69,79 @@ claude plugin validate ./plugin
 
 Archives of earlier versions left in `dist/` are outdated and must not be uploaded.
 
-## Connection: local bridge to a sandbox
+## Installing a ready archive
 
-Implemented in the package, not yet validated in Cowork.
+The MacBook Pro needs no development tools. Build the archive on a development machine with
+`make package`, copy `dist/stock-radar-0.4.0.zip` to the MacBook and, in the Claude desktop app, open
+Customize, Plugins, remove or replace the installed `stock-radar` version and upload the new archive.
+Then quit and reopen the app and confirm that version 0.4.0 lists the four skills.
 
-The service speaks Streamable HTTP only and a plugin can only declare a local server as a command, so the
-manifest declares one stdio server, `stock-radar`, that starts `plugin/mcp/bridge.sh`. The launcher:
+Expected result in a new Cowork task: `check-status` reports the connector as unavailable and stops. No
+tool call to Stock Radar can appear, because no connector exists.
 
-- reads one token from the macOS Keychain item `stock-radar-sandbox-mcp` (account `stock-radar`) at start;
-- exports it as an `Authorization` value in the environment of the proxy only;
-- runs `mcp-remote@0.14.3` through `npx`, with the fixed target `http://127.0.0.1:18001/mcp`, the
-  `http-only` transport and a header argument that holds a placeholder, not the token.
+## Connection: pending
 
-Nothing secret is in the package, in Git, in process arguments or in the proxy log, which prints header
-names only. The proxy does log the JSON-RPC method of each message and the `initialize` body to its error
-stream. The target is fixed in the launcher; there is no option to point it elsewhere.
+Not implemented and not decided. This version connects Cowork to nothing.
 
-Loopback always means the machine where the process runs. The bridge is started by the Claude desktop app
-on the MacBook Pro, so it reaches only a service listening on that MacBook. A stack started on the
-development machine or on the VPS is not reachable through it.
+Established facts:
 
-Requirements on the MacBook Pro: Docker with Compose v2.20 or later, Make, Git, and Node.js 18 or later
-with `npx` on the PATH that the desktop app uses. The first start downloads the pinned proxy from the npm
-registry; later starts use the npm cache.
+- The service speaks Streamable HTTP with a static Bearer token per role and has no OAuth. `compose.yaml`
+  publishes the API on the loopback of whatever host runs it. This repository records no VPS deployment
+  and none was verified in this work; see [operations](operations.md).
+- A remote connector, whether added as a custom connector or declared as an `http` entry in a plugin, is
+  contacted from Anthropic's cloud in every client, Cowork included. The
+  [custom connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
+  requires a server reachable from the public internet and says servers behind a VPN do not connect. Fixed
+  request headers for static credentials are documented there as a beta for a limited set of organizations.
+- Reported by the owner on 2026-10-09, not verified from this repository: the API runs on the VPS in the
+  Compose project `stock-radar-production`, published on `127.0.0.1:8001`, and Tailscale Serve forwards
+  HTTPS on port 8444 of the server's tailnet name to it. From the MacBook Pro `/health/live` returned 200,
+  `/health/ready` and `/mcp` returned 401 without a token, `/health/ready` returned 200 with the reader
+  token, and an authenticated MCP `initialize` returned 421 `Invalid Host header`.
+- That 421 is the Host check of the MCP SDK. The API now accepts exact extra Host values through
+  `MCP_ALLOWED_HOSTS`; see [MCP](api/mcp.md). The setting is implemented and tested locally with synthetic
+  hosts. It has not been applied to the VPS.
+- A tailnet address is reachable from the owner's devices. It does not show that a process running in
+  Anthropic's cloud can reach the VPS.
+- A plugin can also declare a local server that the desktop app starts on the MacBook. That path was
+  implemented once and retired, see below, because it required supporting software on the MacBook.
 
-Because the token is read once at start, every change of the Keychain item needs a restart of the Claude
-desktop app before it takes effect. The reader token is the resting state. The collector token is stored
-only for the synthetic write test and replaced afterwards.
+No connection path is chosen. A public connector, OAuth, an additional tunnel or another bridge must not be
+introduced without a decision by the owner. Until a connector exists, every skill reports the connector as
+unavailable and stops, without simulating a collection or a stored result.
 
-Failure diagnosis, without weakening any control:
+### Retired: local bridge and sandbox
 
-| Symptom | Meaning |
-|---|---|
-| Launcher exits with `Keychain item ... was not found` | The item was not created on this machine |
-| Launcher exits with `npx was not found in PATH` | Node.js is missing or not visible to the desktop app |
-| Proxy prints `Dynamic Client Registration rejected (HTTP 404)` and exits | The service answered 401: the stored token does not match the running sandbox. The proxy then probes the same loopback service for OAuth, finds none and stops. No browser opens and no external sign-in happens |
-| Proxy cannot connect | The sandbox is not running on `127.0.0.1:18001` |
-| HTTP 421 | The request carried a non-loopback Host header; the SDK check is working as intended |
+Version 0.3.0 declared a local stdio server that read a token from the macOS Keychain and started
+`mcp-remote@0.14.3` through `npx` against a disposable backend on `127.0.0.1:18001`, managed by
+`scripts/sandbox.sh` and `make sandbox-*` targets. It worked when driven by hand on the development
+machine and was never validated in Cowork. It was removed in 0.4.0 because it made the MacBook depend on
+Docker, Node.js and a local database. The records of those checks stay in [testing](testing.md).
 
-Host and Origin checks of the MCP SDK are unchanged. Do not disable them and do not add OAuth to work
-around a failure.
+### Optional cleanup of sandbox leftovers
 
-Synced plugins also load in Claude Code on machines signed in to the same account. On a machine without
-the Keychain item the launcher exits at once and the server is shown as failed, which is harmless.
+Only for a machine where the sandbox was started. Nothing here is run automatically, and nothing here
+touches the main installation, whose Compose projects have other names. Do not uninstall Docker, Node.js
+or Tailscale for this. Inspect first, then remove only what the listing shows.
 
-### Sandbox
+```sh
+docker ps -a --filter label=com.docker.compose.project=stock-radar-sandbox
+docker volume ls --filter label=com.docker.compose.project=stock-radar-sandbox
+docker network ls --filter label=com.docker.compose.project=stock-radar-sandbox
+```
 
-`make sandbox-up` creates `.env.sandbox` (ignored by Git, mode 0600) with new random credentials, checks
-that port 18001 is free, migrates and provisions only the sandbox database and starts the API and
-PostgreSQL in the Compose project `stock-radar-sandbox`. The monitor is not started, `MONITOR_ENABLED` is
-false and no provider key is set. The habitual stacks use other project names, volumes and ports and are
-not touched.
+```sh
+docker ps -aq --filter label=com.docker.compose.project=stock-radar-sandbox | xargs docker rm -f
+docker volume ls -q --filter label=com.docker.compose.project=stock-radar-sandbox | xargs docker volume rm
+docker network ls -q --filter label=com.docker.compose.project=stock-radar-sandbox | xargs docker network rm
+rm -f .env.sandbox
+security delete-generic-password -s stock-radar-sandbox-mcp -a stock-radar
+```
 
-| Command | Effect |
-|---|---|
-| `make sandbox-up` | Create credentials if absent, migrate, provision and start the sandbox |
-| `make sandbox-token ROLE=reader` | Store the sandbox reader token in the Keychain item, without printing it |
-| `make sandbox-token ROLE=collector` | Store the sandbox collector token in the same item |
-| `make sandbox-down` | Stop the containers and keep the sandbox volume |
-| `make sandbox-destroy` | Remove the sandbox containers, volumes, `.env.sandbox` and the Keychain item |
-
-`make sandbox-token` reads the token from `.env.sandbox` and hands it to `security -i` on standard input,
-so it never appears in process arguments, shell history or output. It then reads the item back and fails
-if the stored value differs. The token must be stored on the machine that runs the bridge.
-
-Every sandbox command passes `--project-name stock-radar-sandbox` or the equivalent Make variable and
-overrides `COMPOSE_PROJECT_NAME`, `API_PORT`, `MONITOR_ENABLED` and `BRAPI_API_KEY` in its own environment.
-A value inherited from the terminal, or given on the `make` command line, cannot redirect `sandbox-up`,
-`sandbox-down` or `sandbox-destroy` to another project, port or provider key.
-
-### Test sequence on the MacBook Pro
-
-Proposed sequence. Steps run by the owner; record the real results in [testing](testing.md).
-
-1. Check the requirements: `docker compose version`, `node --version`, `npx --version`, `make --version`.
-2. `git pull`, after the changes were committed and pushed with the owner's authorization.
-3. `lsof -nP -iTCP:18001 -sTCP:LISTEN` prints nothing, then `make sandbox-up`.
-4. `make sandbox-token ROLE=reader`, then `sh plugin/mcp/bridge.sh` in a terminal. Expected:
-   `Proxy established successfully`. Stop it with Ctrl+C. This checks the Keychain read, `npx` and the
-   sandbox before Cowork is involved. An `EACCES` error from npm points to a damaged npm cache, not to the
-   plugin.
-5. `make package`, then upload `dist/stock-radar-0.3.0.zip` in Customize, Plugins, replacing 0.2.1.
-6. Quit and reopen the Claude desktop app.
-7. In a new Cowork task ask for a real call of `service_status`, then for `register_source` with a
-   synthetic code. Expected: a tool call block with the version and capabilities, then `forbidden`.
-   A written answer without a tool call block proves nothing.
-8. Only after step 7 passes: `make sandbox-token ROLE=collector`, restart the app, call `register_source`
-   with a synthetic code and name, build one payload from
-   `skills/collect-signals/references/example-collection.json` with the returned source `id` and a
-   `client_collection_id` generated once, call `register_collection`, read it with `get_collection` and send
-   the identical payload again, expecting `duplicate: true`.
-9. Always, also after a failure: `make sandbox-token ROLE=reader`, restart the app and confirm that
-   `register_source` is refused again.
-10. `make sandbox-destroy` when the sandbox is no longer needed.
-
-The example file must not be sent as it is: its `source_id` and `client_collection_id` are placeholders.
-
-### What is not established
-
-- Whether a Cowork task on this account receives tools from a local server. The
-  [support by app](https://claude.com/docs/plugins/platform-support) table says a local server loads when
-  the Cowork session runs on the user's computer;
-  [Cowork on web, desktop and mobile](https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile)
-  says plugins with local MCP servers work through the desktop app, also for sessions in the cloud; the
-  [architecture overview](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview)
-  says local MCP servers do not run in sessions in the cloud. Step 7 is the test. One failed attempt is not
-  proof of incompatibility.
-- Whether the desktop app resolves `npx` and substitutes `${CLAUDE_PLUGIN_ROOT}` for this plugin.
-- Anything about the VPS. The loopback publication is a property of `compose.yaml` on whatever host runs
-  it. This repository records no VPS deployment and none was verified; see [operations](operations.md).
-- Scheduled runs. Interactive success would say nothing about them.
-
-A remote connector is not used. Whether added as a custom connector or declared as an `http` entry, it is
-contacted from Anthropic's cloud, and the
-[custom connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
-requires a publicly reachable server. Fixed request headers for static credentials are documented there as
-a beta for a limited set of organizations. Public ingress and OAuth stay out of scope.
+When a listing was empty, the matching removal command does nothing or reports a missing argument. The last command
+removes only the Keychain item `stock-radar-sandbox-mcp` and fails harmlessly when it does not exist.
+The proxy may also have left a copy in the npm cache and an empty `~/.mcp-auth` folder; both are shared
+with other uses of npm and may be left alone.
 
 ## Scheduling: not configured
 
@@ -198,13 +157,16 @@ background. Do not label a previous session's list as today's.
 
 ## Pending items to connect and test in Cowork
 
-1. Run the test sequence above on the MacBook Pro and record the result of each step.
-2. Confirm the names under which the Stock Radar tools appear in a Cowork task.
-3. Decide whether `prepare-triggers` and `plugin/references/` are removed from the package.
-4. Decide the target after the sandbox: the bridge has a fixed sandbox address by design.
-5. Run `collect-signals` interactively once: confirm which column holds the analyst rating, how the full
+1. Replace version 0.3.0 with the 0.4.0 archive and confirm the four skills and the unavailable report.
+2. Decide and implement the connection from Cowork to the service on the VPS. Nothing is chosen.
+3. Confirm the names under which the Stock Radar tools appear in a Cowork task.
+4. With a test service, register one synthetic collection, confirm the receipt and repeat it to see
+   `duplicate: true`. The packaged example must not be sent as it is: its `source_id` and
+   `client_collection_id` are placeholders.
+5. Decide whether `prepare-triggers` and `plugin/references/` are removed from the package.
+6. Run `collect-signals` interactively once: confirm which column holds the analyst rating, how the full
    list is traversed, the exchange prefix shown for symbols, whether the page states a total and a date, and
    that a session clock and UUID generator are available.
-6. Exercise the access pause by starting signed out, then replying `logado`.
-7. Resolve the TradingView usage conditions recorded in [integrations](integrations.md) before unattended use.
-8. Create the daily scheduled task and observe where it runs and what happens when the Mac is asleep.
+7. Exercise the access pause by starting signed out, then replying `logado`.
+8. Resolve the TradingView usage conditions recorded in [integrations](integrations.md) before unattended use.
+9. Create the daily scheduled task and observe where it runs and what happens when the Mac is asleep.

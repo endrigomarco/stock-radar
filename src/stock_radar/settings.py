@@ -1,7 +1,13 @@
 import os
+import re
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 from sqlalchemy import URL
+
+MCP_LOCAL_HOSTS = ("127.0.0.1:*", "localhost:*", "[::1]:*")
+MCP_LOCAL_ORIGINS = ("http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*")
+MCP_ALLOWED_HOST_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?(:[0-9]{1,5})?$")
+MCP_ALLOWED_HOSTS_LIMIT = 8
 
 
 class Settings(BaseModel):
@@ -17,6 +23,17 @@ class Settings(BaseModel):
     database_name: str = Field(min_length=1)
     database_host: str = "postgres"
     database_port: int = Field(default=5432, ge=1, le=65535)
+    mcp_allowed_hosts: tuple[str, ...] = Field(default=(), max_length=MCP_ALLOWED_HOSTS_LIMIT)
+
+    @field_validator("mcp_allowed_hosts", mode="before")
+    @classmethod
+    def exact_hosts(cls, value: object) -> tuple[str, ...]:
+        entries = value.split(",") if isinstance(value, str) else list(value or ())
+        hosts = tuple(str(entry).strip().lower() for entry in entries if str(entry).strip())
+        for host in hosts:
+            if not MCP_ALLOWED_HOST_PATTERN.fullmatch(host):
+                raise ValueError("MCP_ALLOWED_HOSTS accepts exact host or host:port entries only")
+        return hosts
 
     @model_validator(mode="after")
     def separate_tokens(self) -> "Settings":
@@ -38,7 +55,11 @@ class Settings(BaseModel):
             database_name=os.environ.get("POSTGRES_DB", ""),
             database_host=os.environ.get("POSTGRES_HOST", "postgres"),
             database_port=os.environ.get("POSTGRES_PORT", "5432"),
+            mcp_allowed_hosts=os.environ.get("MCP_ALLOWED_HOSTS", ""),
         )
+
+    def mcp_hosts(self) -> list[str]:
+        return [*MCP_LOCAL_HOSTS, *self.mcp_allowed_hosts]
 
     def database_url(self, write: bool = False) -> URL:
         return URL.create(

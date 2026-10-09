@@ -29,6 +29,7 @@ export APP_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
 export MONITOR_POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
 export MONITOR_ENABLED=false BRAPI_API_KEY=
 export API_READER_TOKEN=synthetic-reader-token-for-isolated-tests-only
+export MCP_ALLOWED_HOSTS=
 : > "$test_dir/env"
 compose config --quiet
 compose build python
@@ -41,6 +42,7 @@ compose build tests
 compose run --rm --no-deps --entrypoint python migrations -m stock_radar.db.provision
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_api.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_workflows.py
+compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_transport.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_webhooks.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_observability.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_monitoring.py

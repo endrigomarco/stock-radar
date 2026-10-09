@@ -25,7 +25,7 @@ application source and locked dependencies arrive.
 Copy `.env.example` to `.env`, run `chmod 600 .env`, and set distinct random values for
 `POSTGRES_PASSWORD`, `APP_POSTGRES_PASSWORD`, `COLLECTOR_POSTGRES_PASSWORD`, `API_READER_TOKEN` and
 `API_COLLECTOR_TOKEN`, `WEBHOOK_TOKEN` and `WEBHOOK_POSTGRES_PASSWORD`. Application passwords and tokens require at least 32 characters; all three tokens must differ. No default credentials are provided. Existing private local files have been extended
-with distinct generated secrets. `API_PORT` is 8000 locally and 8001 in the local production configuration. `.env` is ignored by Git and Docker. `make config` validates without printing
+with distinct generated secrets. `API_PORT` is 8000 locally and 8001 in the local production configuration. `MCP_ALLOWED_HOSTS` is empty by default; set it only to the exact `host:port` that a private proxy in front of the API sends as Host, as described in [MCP](api/mcp.md), and recreate the API container afterwards. `.env` is ignored by Git and Docker. `make config` validates without printing
 expanded credentials. Never paste the output of plain `docker compose config` into logs or Git.
 
 | Command | Purpose |
@@ -41,10 +41,6 @@ expanded credentials. Never paste the output of plain `docker compose config` in
 | `make db` | Open interactive SQL in the running database |
 | `make test` | Run disposable infrastructure, schema and API checks |
 | `make package` | Build the plugin archive in `dist/` from `plugin/`, without `.env` or Docker |
-| `make sandbox-up` | Start the disposable sandbox stack on `127.0.0.1:18001`, with its own project, database and tokens |
-| `make sandbox-token ROLE=reader` | Store a sandbox token in the macOS Keychain; `ROLE=collector` for the write test |
-| `make sandbox-down` | Stop the sandbox and keep its volume |
-| `make sandbox-destroy` | Remove the sandbox containers, volumes, `.env.sandbox` and Keychain item |
 | `make db-revision MESSAGE="description"` | Generate a candidate migration from models |
 | `make db-migrate` | Apply reviewed pending revisions |
 | `make db-check` | Check model/schema drift without upgrading |
@@ -56,10 +52,6 @@ Select a different environment file with `make up ENV_FILE=/absolute/path/stock-
 same selection for config, down, status, logs and db. Make test ignores runtime credentials and uses a
 unique test project. To run a separate persistent local stack, also set a distinct `COMPOSE_PROJECT_NAME`.
 Keep that name consistent so subsequent commands address the same containers and volume.
-
-The sandbox uses `.env.sandbox` and the Compose project `stock-radar-sandbox`, created by
-`scripts/sandbox.sh`. It exists for the plugin connection test in [plugin](plugin.md), never starts the
-monitor and holds only synthetic data. Its commands address that project alone.
 
 Local private files `.env` and `.env.production` use separate generated passwords and mode 0600.
 The first selects `stock-radar`; the second selects `stock-radar-production` through
