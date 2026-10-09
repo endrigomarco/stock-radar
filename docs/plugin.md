@@ -5,20 +5,20 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.4.0, prepared on 2026-10-09 for Claude Cowork on the MacBook Pro.
+Version 0.5.0, prepared on 2026-10-09 for Claude Cowork on the MacBook Pro.
 
 | State | Scope |
 |---|---|
-| Prepared in the repository | Manifest, four skills with their references, `make package` |
-| Checked statically | Manifest without local servers, archive contents, plugin validator |
-| Tested by the owner in Cowork on the MacBook Pro | Reported on 2026-10-09 for version 0.2.1: the plugin installed and was enabled, the interface listed its nine files and four skills, and `check-status` reported that the MCP tools were absent without claiming backend access or changed records |
-| Not validated | Any MCP connection from Cowork, a synthetic collection from Cowork, Chrome reading of the real table, scheduling, any VPS operation |
+| Implemented | Manifest with one local MCP server, the Python bridge in `plugin/mcp/`, four skills with their references, `make package` |
+| Tested with synthetic data | The bridge over stdio against a synthetic MCP server: discovery, successful calls, tool errors, refused token, closed port, redirect to another origin, clean diagnostics; in Docker and natively on macOS with Python 3.13 |
+| Tested by the owner | Reported on 2026-10-09: version 0.2.1 installed in Cowork with its four skills, and `check-status` reported the MCP tools as absent; from a terminal on the MacBook Pro an authenticated `initialize` to the VPS endpoint over Tailscale returned 200 |
+| Not validated | Cowork starting the bridge, tool discovery and any tool call from Cowork, the Keychain read on the MacBook, Python 3.10 to 3.12, Chrome reading of the real table, scheduling |
 
-Installation and the behaviour without a connection are validated by the owner's test. Connectivity is not.
+A terminal test is not evidence about Cowork. Connectivity from Cowork is not validated.
 
-Architecture decision by the owner: the backend and PostgreSQL run on the VPS. The MacBook Pro runs the
-Claude desktop app, Cowork and this plugin only. Using the plugin must not require Docker, Node.js, a local
-database or any start script on the MacBook. Docker remains the runtime for development and for the VPS.
+Architecture approved by the owner: Cowork, MCP over stdio, a Python process of the plugin on the MacBook
+Pro, HTTPS over Tailscale, the MCP endpoint of the API on the VPS. The backend and PostgreSQL stay on the
+VPS. The MacBook needs Python and the bridge dependencies only; no Docker, Node.js, database or local API.
 
 ## Skills
 
@@ -49,7 +49,8 @@ Format checked against the official documentation on 2026-10-09:
 [support by app](https://claude.com/docs/plugins/platform-support),
 [custom skills](https://claude.com/docs/skills/how-to).
 
-- Cowork loads skills, commands, agents, hooks and connectors from a plugin. This plugin uses skills only.
+- Cowork loads skills, commands, agents, hooks and connectors from a plugin. This plugin uses skills and one
+  local MCP server.
 - Upload accepts a folder archived as `.zip` or `.plugin` holding one `.claude-plugin/plugin.json`, either
   at the archive root or inside a single top-level folder. Limits are 200 MB and 5,000 files.
 - A top-level `bin/` directory blocks installation in Cowork. `${user_config.*}` values are not prompted
@@ -69,54 +70,93 @@ claude plugin validate ./plugin
 
 Archives of earlier versions left in `dist/` are outdated and must not be uploaded.
 
-## Installing a ready archive
+## Connection: Python bridge
 
-The MacBook Pro needs no development tools. Build the archive on a development machine with
-`make package`, copy `dist/stock-radar-0.4.0.zip` to the MacBook and, in the Claude desktop app, open
-Customize, Plugins, remove or replace the installed `stock-radar` version and upload the new archive.
-Then quit and reopen the app and confirm that version 0.4.0 lists the four skills.
+Implemented and checked with synthetic data. Not validated in Cowork.
 
-Expected result in a new Cowork task: `check-status` reports the connector as unavailable and stops. No
-tool call to Stock Radar can appear, because no connector exists.
+`plugin/mcp/bridge.py` uses the official MCP Python SDK, pinned to the version the backend uses. It runs a
+low-level MCP server on standard input and output and, for every `tools/list` and `tools/call`, opens a
+Streamable HTTP client session to the service, forwards the request and returns the service's answer
+object unchanged. It has no tools, schemas or business rules of its own and advertises the tools capability
+only. Tool arguments are validated by the service, not by the bridge.
 
-## Connection: pending
+| Property | Behaviour |
+|---|---|
+| Endpoint | Fixed constant in `bridge.py`, required to be `https` without embedded credentials |
+| TLS | Certificate validation on; no option to disable it |
+| Timeouts | 10 seconds to connect, 60 seconds to read |
+| Redirects | The SDK follows a redirect only within the same origin; a redirect elsewhere fails the call and the credential is not sent there |
+| Retries | None. One forwarded request per call, so a write is never repeated by the bridge |
+| Credential | Reader token read from the Keychain item `stock-radar-mcp`, account `reader`, once at start |
+| Failures | Refused token, unreachable service, timeout or redirect become an MCP error with code -32001, never a tool result |
+| Tool errors | A result with `isError` from the service is passed through as it is |
+| Output | Standard output carries MCP only. Diagnostics go to the error stream and name the kind of failure and the HTTP status, never a token, a header or tool data |
 
-Not implemented and not decided. This version connects Cowork to nothing.
+The manifest starts `/bin/sh ${CLAUDE_PLUGIN_ROOT}/mcp/start.sh`. The launcher runs the bridge with the
+interpreter at `~/Library/Application Support/stock-radar/bridge/bin/python`, resolved from `$HOME`, so the
+package holds no personal path and does not depend on the PATH of the desktop app. When that environment is
+missing the launcher says so on the error stream and exits; nothing is installed at start or per call.
 
-Established facts:
+Dependencies are in `plugin/mcp/requirements.txt`: `mcp==2.3.0` and its transitive packages, pinned with
+hashes. Regenerate it only with
+`make uv ARGS="pip compile --universal --python-version 3.10 --generate-hashes --no-header --no-annotate plugin/mcp/requirements.in -o plugin/mcp/requirements.txt"`.
+The SDK requires Python 3.10 or later.
 
-- The service speaks Streamable HTTP with a static Bearer token per role and has no OAuth. `compose.yaml`
-  publishes the API on the loopback of whatever host runs it. This repository records no VPS deployment
-  and none was verified in this work; see [operations](operations.md).
-- A remote connector, whether added as a custom connector or declared as an `http` entry in a plugin, is
-  contacted from Anthropic's cloud in every client, Cowork included. The
-  [custom connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
-  requires a server reachable from the public internet and says servers behind a VPN do not connect. Fixed
-  request headers for static credentials are documented there as a beta for a limited set of organizations.
-- Reported by the owner on 2026-10-09, not verified from this repository: the API runs on the VPS in the
-  Compose project `stock-radar-production`, published on `127.0.0.1:8001`, and Tailscale Serve forwards
-  HTTPS on port 8444 of the server's tailnet name to it. From the MacBook Pro `/health/live` returned 200,
-  `/health/ready` and `/mcp` returned 401 without a token, `/health/ready` returned 200 with the reader
-  token, and an authenticated MCP `initialize` returned 421 `Invalid Host header`.
-- That 421 is the Host check of the MCP SDK. The API now accepts exact extra Host values through
-  `MCP_ALLOWED_HOSTS`; see [MCP](api/mcp.md). The setting is implemented and tested locally with synthetic
-  hosts. It has not been applied to the VPS.
-- A tailnet address is reachable from the owner's devices. It does not show that a process running in
-  Anthropic's cloud can reach the VPS.
-- A plugin can also declare a local server that the desktop app starts on the MacBook. That path was
-  implemented once and retired, see below, because it required supporting software on the MacBook.
+The service must list the Host that the bridge presents in `MCP_ALLOWED_HOSTS`; see [MCP](api/mcp.md).
+The bridge sends no Origin header.
 
-No connection path is chosen. A public connector, OAuth, an additional tunnel or another bridge must not be
-introduced without a decision by the owner. Until a connector exists, every skill reports the connector as
-unavailable and stops, without simulating a collection or a stored result.
+Because the token is read once at start, a changed Keychain item takes effect after the Claude desktop app
+is restarted. Only the reader token is used in this step. With it the service refuses every write with
+`forbidden`, so no source, collection or cancellation can be registered in production through the bridge.
 
-### Retired: local bridge and sandbox
+### First real test on the MacBook Pro
+
+Steps run by the owner. Record the real results in [testing](testing.md).
+
+1. Prepare the bridge once, as described under Bridge setup in `plugin/README.md`: Python 3.10 or later,
+   the dedicated environment, the Keychain item created with the prompting form of `security`, and the
+   terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
+2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
+   `stock-radar-0.5.0.zip`, then quit and reopen the app.
+3. In a new Cowork task ask for a real call of `service_status`.
+
+| Outcome | Criterion |
+|---|---|
+| Passed | A tool call block for `service_status` with the service version and capabilities |
+| Missing setup | The environment, the Keychain item or Tailscale is absent on the MacBook: fix and repeat |
+| Attempt failed | Setup complete and the terminal check passes, but the task has no Stock Radar tools. Record whether the task ran in the cloud or on the computer and the app version |
+| Inconclusive | A written answer without a tool call block, or an unrelated error |
+
+A failed attempt is recorded as evidence and as a limitation. It does not authorize another architecture
+or public exposure of the VPS. Do not register a source or a collection and do not cancel anything in
+production in this step.
+
+### What is not established
+
+- Whether a Cowork task on this account receives tools from a local server. The
+  [support by app](https://claude.com/docs/plugins/platform-support) table says a local server loads when
+  the Cowork session runs on the user's computer;
+  [Cowork on web, desktop and mobile](https://support.claude.com/en/articles/15520349-use-claude-cowork-on-web-desktop-and-mobile)
+  says plugins with local MCP servers work through the desktop app, also for sessions in the cloud; the
+  [architecture overview](https://support.claude.com/en/articles/14479288-claude-cowork-architecture-overview)
+  says local MCP servers do not run in sessions in the cloud. The owner reported that a shell command of a
+  Cowork task ran in the cloud and did not reach the tailnet address, which is consistent with all three.
+- Whether the desktop app substitutes `${CLAUDE_PLUGIN_ROOT}` and passes `HOME` for this plugin.
+- The state of the VPS beyond the owner's report. Nothing on the VPS was accessed from this repository.
+- Scheduled runs. Interactive success would say nothing about them.
+
+A remote connector is not used: it is contacted from Anthropic's cloud and the
+[custom connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
+requires a publicly reachable server. Public ingress and OAuth stay out of scope.
+
+### Retired: Node bridge and sandbox
 
 Version 0.3.0 declared a local stdio server that read a token from the macOS Keychain and started
 `mcp-remote@0.14.3` through `npx` against a disposable backend on `127.0.0.1:18001`, managed by
 `scripts/sandbox.sh` and `make sandbox-*` targets. It worked when driven by hand on the development
 machine and was never validated in Cowork. It was removed in 0.4.0 because it made the MacBook depend on
-Docker, Node.js and a local database. The records of those checks stay in [testing](testing.md).
+Docker, Node.js and a local database. The records of those checks stay in [testing](testing.md). The Python
+bridge above replaces it and uses none of those components.
 
 ### Optional cleanup of sandbox leftovers
 
@@ -157,16 +197,16 @@ background. Do not label a previous session's list as today's.
 
 ## Pending items to connect and test in Cowork
 
-1. Replace version 0.3.0 with the 0.4.0 archive and confirm the four skills and the unavailable report.
-2. Decide and implement the connection from Cowork to the service on the VPS. Nothing is chosen.
-3. Confirm the names under which the Stock Radar tools appear in a Cowork task.
-4. With a test service, register one synthetic collection, confirm the receipt and repeat it to see
+1. Run the first real test above and record the outcome.
+2. Confirm the names under which the Stock Radar tools appear in a Cowork task.
+3. Decide how the collector token is used for writes, then, with a test service or an explicit decision
+   about production, register one synthetic collection, confirm the receipt and repeat it to see
    `duplicate: true`. The packaged example must not be sent as it is: its `source_id` and
    `client_collection_id` are placeholders.
-5. Decide whether `prepare-triggers` and `plugin/references/` are removed from the package.
-6. Run `collect-signals` interactively once: confirm which column holds the analyst rating, how the full
+4. Decide whether `prepare-triggers` and `plugin/references/` are removed from the package.
+5. Run `collect-signals` interactively once: confirm which column holds the analyst rating, how the full
    list is traversed, the exchange prefix shown for symbols, whether the page states a total and a date, and
    that a session clock and UUID generator are available.
-7. Exercise the access pause by starting signed out, then replying `logado`.
-8. Resolve the TradingView usage conditions recorded in [integrations](integrations.md) before unattended use.
-9. Create the daily scheduled task and observe where it runs and what happens when the Mac is asleep.
+6. Exercise the access pause by starting signed out, then replying `logado`.
+7. Resolve the TradingView usage conditions recorded in [integrations](integrations.md) before unattended use.
+8. Create the daily scheduled task and observe where it runs and what happens when the Mac is asleep.

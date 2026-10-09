@@ -12,8 +12,8 @@ Eligible signals now create reusable tracking runs, and a single Docker monitori
 quotes every 30 minutes, at minutes 10 and 40, during B3 sessions to lock references and record first observed threshold hits.
 Monitoring is disabled by default and has only been validated with a fake provider. Financial metrics,
 VPS deployment and live-provider integration remain pending. The plugin package for Cowork was
-installed by the owner and its skills were discovered. It starts no local process. The connection from Cowork
-to the service on the VPS is not implemented.
+installed by the owner and its skills were discovered. It bundles a local Python bridge to the service's MCP
+endpoint over the private network; the bridge passed synthetic checks, and its use from Cowork is not validated.
 
 ## First experiment
 

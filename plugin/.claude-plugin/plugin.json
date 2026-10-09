@@ -1,8 +1,8 @@
 {
   "name": "stock-radar",
   "displayName": "Stock Radar",
-  "version": "0.4.0",
-  "description": "Collect the daily TradingView list of Brazilian biggest losers with analyst ratings from the user's Chrome and register it in the Stock Radar service through its MCP tools. Includes status and evidence skills. The package starts no local process and bundles no connector, address or credential; without the Stock Radar MCP tools every skill reports the connector as unavailable and stops.",
+  "version": "0.5.0",
+  "description": "Collect the daily TradingView list of Brazilian biggest losers with analyst ratings from the user's Chrome and register it in the Stock Radar service through its MCP tools. Includes status and evidence skills. Bundles a local Python bridge that forwards MCP calls to the owner's Stock Radar service over a private network; the credential stays in the macOS Keychain and is not part of the package.",
   "author": {
     "name": "Endrigo Marco"
   },
@@ -11,5 +11,13 @@
     "signals",
     "collection",
     "tradingview"
-  ]
+  ],
+  "mcpServers": {
+    "stock-radar": {
+      "command": "/bin/sh",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp/start.sh"
+      ]
+    }
+  }
 }

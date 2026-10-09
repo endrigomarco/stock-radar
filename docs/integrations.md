@@ -86,9 +86,9 @@ publicly reachable and a VPN-only address does not connect. Tailscale on the Mac
 the VPS reachable as a remote connector. Local MCP servers are documented as loading in Cowork sessions that
 run on the user's computer. Since 2026-10-06 new Cowork tasks on Pro and Max plans run in the cloud, and the
 official pages disagree on whether a local server is then available through the open desktop app, so this
-must be observed, not assumed. The plugin bundles no local server: the service belongs on the VPS and the
-MacBook is not meant to run supporting software for it. Tailscale on the MacBook says nothing about a
-process that runs in Anthropic's cloud, and no route to the VPS has been tested.
+must be observed, not assumed. The owner reported that a shell command run by a Cowork task executed in the
+cloud and could not reach the tailnet address, so only a process started on the MacBook can use Tailscale.
+The plugin therefore bundles a Python bridge as a local server; whether Cowork starts it is not validated.
 [Scheduled tasks](https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-claude-cowork)
 run remotely unless they need local files or apps; driving Chrome from a scheduled run is not documented.
 The consequences and the open decision are in [plugin](plugin.md).

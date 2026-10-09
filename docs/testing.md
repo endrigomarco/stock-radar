@@ -257,3 +257,34 @@ rejected at start.
 Validated on 2026-10-09: the complete disposable Docker suite passed with this check included. Not
 validated: the setting on the VPS, the Host value that Tailscale Serve actually forwards, and any request
 through the tailnet. The 421 that prompted the change was reported by the owner and not reproduced here.
+
+## Python bridge
+
+`tests/check_bridge.py` is part of `make test`. It starts synthetic MCP servers on loopback, launches the
+bridge as a child process over stdio through `tests/bridge_harness.py`, which replaces only the endpoint
+and the Keychain read, and drives it with the SDK client. No real token, host or data is used.
+
+Checked on 2026-10-09 for plugin version 0.5.0, in the tests image without network and natively on macOS
+with Python 3.13 in a scratch environment built from `plugin/mcp/requirements.txt` with hash checking:
+
+- the tool list through the bridge equals the list read directly, including descriptions and input and
+  output schemas;
+- a successful call returns the same structured content and text with `isError` false;
+- a tool error, invalid arguments and an unknown tool arrive with `isError` true and the service's text;
+- a refused token, a closed port and a redirect to another origin each end `tools/list` and `tools/call`
+  with MCP error -32001, never a result, and the other origin receives no request;
+- diagnostics contain no token and no `Bearer` value;
+- the endpoint check rejects `http` and embedded credentials, a missing Keychain command or item stops the
+  bridge with exit code 1 and nothing on standard output, and the launcher reports a missing environment;
+- the manifest declares the launcher by `${CLAUDE_PLUGIN_ROOT}` and its version equals the bridge version;
+- `make package`, `claude plugin validate ./plugin` and `git diff --check`.
+
+Reported by the owner, not reproduced here: from a terminal on the MacBook Pro an authenticated
+`initialize` to the VPS endpoint over Tailscale returned 200 with server name `Stock Radar`, version
+`0.1.0` and protocol version `2025-03-26`; a shell command of a Cowork task ran in the cloud and did not
+reach that address.
+
+Not validated: the bridge against the real endpoint, the Keychain read with a real item, Cowork starting
+the bridge, tool discovery and `service_status` from a Cowork task, and Python 3.10 to 3.12. The complete
+`make test` was not rerun for this increment because no application code changed; the new check was run
+alone in the same image.
