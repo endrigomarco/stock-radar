@@ -2,7 +2,7 @@
 
 ## Implemented scope
 
-The Docker backend includes REST and MCP interfaces, Pydantic ViewModels, SQLAlchemy entities, eleven
+The Docker backend includes REST and MCP interfaces, Pydantic ViewModels, SQLAlchemy entities, twelve
 normalized tables and Alembic migrations. Shared services register sources, persist collections atomically,
 normalize ratings, list signals and report status/data quality. Reader and collector tokens map to separate
 restricted database roles. Webhook receipt and processing of existing mappings are implemented with a restricted third database role.

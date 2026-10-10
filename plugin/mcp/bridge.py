@@ -14,7 +14,7 @@ from mcp.server.stdio import stdio_server
 from mcp.shared.exceptions import MCPError
 
 BRIDGE_NAME = "stock-radar-bridge"
-BRIDGE_VERSION = "0.5.0"
+BRIDGE_VERSION = "0.6.0"
 ENDPOINT = "https://private-server.tail72966f.ts.net:8444/mcp"
 KEYCHAIN_SERVICE = "stock-radar-mcp"
 KEYCHAIN_ACCOUNT = "reader"

@@ -13,10 +13,12 @@ invent tool names, service addresses, credentials or successful writes. No direc
 
 ## Product
 
-Collect the Brazilian biggest losers and their analyst consensus. The backend selects negative daily change
-plus Strong Buy (`Viés de alta forte`). Analyst rating and technical rating are different signals. Preserve
-original labels, missing values, source URL, observation time and table completeness. A new observation is
-not necessarily a newly issued recommendation. The backend owns normalization and selection.
+Examine the whole list of Brazilian biggest losers and register only the rows whose analyst rating is
+Strong Buy (`Viés de alta forte`) with a negative daily change. Rows with any other rating are counted and
+not stored. Analyst rating and technical rating are different signals and only the analyst column decides.
+The backend applies the same rule and rejects a collection that contains any other row. Preserve original
+labels, source URL, observation time and how much of the list was examined. A new observation is not
+necessarily a newly issued recommendation.
 
 ## Tracking
 

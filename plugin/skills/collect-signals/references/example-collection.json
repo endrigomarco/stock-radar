@@ -1,12 +1,13 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "client_collection_id": "00000000-0000-4000-8000-000000000001",
   "source_id": "00000000-0000-4000-8000-000000000002",
   "source_url": "https://example.invalid/synthetic-losers",
   "observed_at": "2026-01-05T20:30:00Z",
   "market_session_date": "2026-01-05",
-  "status": "partial",
+  "status": "complete",
   "source_total": 3,
+  "rows_examined": 3,
   "filters": {
     "list": "synthetic_losers",
     "column_view": "Synthetic view"
@@ -28,40 +29,6 @@
         "price_text": "12,34 BRL",
         "change_text": "−2,50%",
         "rating_text": "Viés de alta forte"
-      }
-    },
-    {
-      "exchange": "SYNTH",
-      "symbol": "TEST1",
-      "currency": "BRL",
-      "source_symbol": "SYNTH:TEST1",
-      "signal_kind": "technical_rating",
-      "source_column": "Synthetic technical column",
-      "original_rating": "Venda",
-      "observed_price": "12.34",
-      "daily_change_percent": "-2.50",
-      "observed_at": "2026-01-05T20:30:00Z",
-      "source_published_at": null,
-      "raw_evidence": {
-        "rating_text": "Venda"
-      }
-    },
-    {
-      "exchange": "SYNTH",
-      "symbol": "TEST2",
-      "currency": "BRL",
-      "source_symbol": "SYNTH:TEST2",
-      "signal_kind": "analyst_consensus",
-      "source_column": "Synthetic analyst column",
-      "original_rating": null,
-      "observed_price": null,
-      "daily_change_percent": "-1.10",
-      "observed_at": "2026-01-05T20:30:20Z",
-      "source_published_at": null,
-      "raw_evidence": {
-        "price_text": "1.234",
-        "change_text": "−1,10%",
-        "rating_text": null
       }
     }
   ]

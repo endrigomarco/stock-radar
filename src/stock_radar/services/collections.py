@@ -49,9 +49,13 @@ class CollectionService:
                     raise ServiceError("collection_identity_conflict", 409)
                 collection_id = existing.id
             else:
+                rows = sorted(request.observations, key=lambda item: (item.exchange, item.symbol, item.signal_kind))
+                ratings = [self._normalize_rating(source.code, row) for row in rows]
+                if not all(is_eligible(row.signal_kind, rating, row.daily_change_percent) for row, rating in zip(rows, ratings)):
+                    raise ServiceError("observation_not_eligible", 422)
                 tracking = TrackingService(self.session)
                 version = tracking.current_version()
-                for row in sorted(request.observations, key=lambda item: (item.exchange, item.symbol, item.signal_kind)):
+                for row, rating in zip(rows, ratings):
                     instrument_id = self.session.scalar(insert(Instrument).values(
                         exchange=row.exchange, symbol=row.symbol, currency=row.currency,
                     ).on_conflict_do_nothing(index_elements=[Instrument.exchange, Instrument.symbol]).returning(Instrument.id))
@@ -60,7 +64,6 @@ class CollectionService:
                         if instrument.currency != row.currency:
                             raise ServiceError("instrument_currency_conflict", 409)
                         instrument_id = instrument.id
-                    rating = self._normalize_rating(source.code, row)
                     observed_values = {"observed_price": row.observed_price, "daily_change_percent": row.daily_change_percent, "original_rating": row.original_rating}
                     missing = [name for name, value in observed_values.items() if value is None]
                     if rating is None:
@@ -76,7 +79,7 @@ class CollectionService:
                         quality_details={"missing_or_unknown": missing} if missing else {},
                     )
                     self.session.add(observation)
-                    if version is not None and is_eligible(row.signal_kind, rating, row.daily_change_percent):
+                    if version is not None:
                         self.session.flush()
                         tracking.attach(observation.id, instrument_id, version)
                 self.session.flush()
@@ -107,6 +110,7 @@ class CollectionService:
             "market_session_date": request.market_session_date,
             "status": request.status,
             "source_total": request.source_total,
+            "rows_examined": request.rows_examined,
             "filters": request.filters,
         }
         return values, digest
@@ -116,6 +120,7 @@ class CollectionService:
         return CollectionOutput(
             id=entity.id, source_id=entity.source_id, client_collection_id=entity.client_collection_id,
             status=entity.status, observed_at=entity.observed_at, received_at=entity.received_at,
+            source_total=entity.source_total, rows_examined=entity.rows_examined,
             observation_count=count, eligible_count=eligible, incomplete_count=incomplete,
         )
 

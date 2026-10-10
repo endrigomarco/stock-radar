@@ -87,7 +87,7 @@ def main() -> None:
             assert rules["window_sessions"] == 20 and len(rules["signed_percents"]) == 6
         inspector = inspect(engine)
         assert set(inspector.get_table_names()) == set(Base.metadata.tables) | {"alembic_version"}
-        assert len(Base.metadata.tables) == 11
+        assert len(Base.metadata.tables) == 12
         for table in Base.metadata.tables:
             assert inspector.get_pk_constraint(table)["constrained_columns"] == ["id"]
         before = set((scripts / "versions").glob("*.py"))

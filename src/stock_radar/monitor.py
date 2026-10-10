@@ -10,7 +10,7 @@ from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session
 
 from stock_radar import brapi
-from stock_radar.market_calendar import CalendarUnavailable, polling_open
+from stock_radar.market_calendar import CalendarUnavailable, TradingCalendar, load_around
 from stock_radar.observability.logging import configure_logging, emit, request_id
 from stock_radar.observability.telemetry import Telemetry, correlation_id
 from stock_radar.services.tracking import POLL_INTERVAL_MINUTES, TrackingService, quote_rejection
@@ -52,7 +52,9 @@ def _cycle(engine: Engine, fetch: FetchQuote, capacity: int, stale: dict, teleme
     with Session(engine) as session:
         expired = TrackingService(session).expire(now)
     summary = {"outcome": "completed", "expired": len(expired), "admitted": 0, "instruments": 0, "recorded": 0, "unchanged": 0, "rejected": 0, "failed": 0, "skipped": 0, "stale": []}
-    state = _session_state(now)
+    with Session(engine) as session:
+        calendar = load_around(session, now)
+    state = _session_state(calendar, now)
     if state != SESSION_OPEN:
         return summary | {"outcome": state}
     with Session(engine) as session:
@@ -62,7 +64,7 @@ def _cycle(engine: Engine, fetch: FetchQuote, capacity: int, stale: dict, teleme
         instruments = service.monitored_instruments(now)
     summary["instruments"] = len(instruments)
     for position, instrument in enumerate(instruments):
-        state = _session_state(clock())
+        state = _session_state(calendar, clock())
         if state != SESSION_OPEN:
             summary["outcome"] = "session_ended" if state == "market_closed" else state
             summary["skipped"] = len(instruments) - position
@@ -70,7 +72,7 @@ def _cycle(engine: Engine, fetch: FetchQuote, capacity: int, stale: dict, teleme
         try:
             quote = fetch(instrument.symbol, instrument.currency)
             received_at = clock()
-            reason = quote_rejection(quote.quoted_at, received_at)
+            reason = quote_rejection(quote.quoted_at, received_at, calendar)
             if reason:
                 level = logging.INFO if reason in INFORMATIONAL_REJECTIONS else logging.WARNING
                 emit("quote_rejected", level, instrument_id=str(instrument.id), symbol=instrument.symbol, reason=reason, quoted_at=quote.quoted_at.isoformat())
@@ -97,9 +99,9 @@ def _cycle(engine: Engine, fetch: FetchQuote, capacity: int, stale: dict, teleme
     return summary
 
 
-def _session_state(instant: datetime) -> str:
+def _session_state(calendar: TradingCalendar, instant: datetime) -> str:
     try:
-        return SESSION_OPEN if polling_open(instant) else "market_closed"
+        return SESSION_OPEN if calendar.polling_open(instant) else "market_closed"
     except CalendarUnavailable as error:
         emit("calendar_unavailable", logging.WARNING, year=error.year)
         return "calendar_unavailable"

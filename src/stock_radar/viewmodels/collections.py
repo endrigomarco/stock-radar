@@ -33,7 +33,7 @@ class ObservationInput(BaseModel):
 class CollectionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2]
     client_collection_id: UUID
     source_id: UUID
     source_url: HttpUrl = Field(max_length=2000)
@@ -41,6 +41,7 @@ class CollectionInput(BaseModel):
     market_session_date: date
     status: Literal["complete", "partial", "failed"]
     source_total: int | None = Field(default=None, ge=0, le=2147483647)
+    rows_examined: int = Field(ge=0, le=2147483647)
     filters: dict[str, ShortText] = Field(default_factory=dict, max_length=20)
     observations: list[ObservationInput] = Field(max_length=2000)
 
@@ -63,6 +64,10 @@ class CollectionInput(BaseModel):
             raise ValueError("Duplicate observations in collection")
         if self.status == "failed" and self.observations:
             raise ValueError("Failed collections cannot contain accepted observations")
+        if len(self.observations) > self.rows_examined:
+            raise ValueError("Observations cannot exceed the rows examined")
+        if self.status == "complete" and self.source_total is not None and self.rows_examined != self.source_total:
+            raise ValueError("A complete collection must examine every row of the displayed total")
         return self
 
 
@@ -73,6 +78,8 @@ class CollectionOutput(BaseModel):
     status: str
     observed_at: datetime
     received_at: datetime
+    source_total: int | None
+    rows_examined: int | None
     observation_count: int
     eligible_count: int
     incomplete_count: int

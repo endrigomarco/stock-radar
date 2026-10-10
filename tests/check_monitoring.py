@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
@@ -8,13 +8,15 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import create_engine, event, func, select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from stock_radar import brapi
 from stock_radar.app import create_app
 from stock_radar.db.config import database_url
-from stock_radar.db.models import Experiment, ExperimentVersion, Instrument, PriceQuote, SignalObservation, TrackingRun, TriggerEvent, TriggerLevel
+from stock_radar.db.models import Experiment, ExperimentVersion, Instrument, PriceQuote, SignalObservation, TrackingRun, TradingDay, TriggerEvent, TriggerLevel
+from stock_radar.market_calendar import CalendarUnavailable, load_calendar, window_close
 from stock_radar.monitor import run_cycle, seconds_until_next_slot
 from stock_radar.observability.telemetry import Telemetry
 from stock_radar.services.tracking import EXPERIMENT_CODE, TrackingService
@@ -126,6 +128,49 @@ def check_provider_contract() -> None:
         server.shutdown()
 
 
+def check_calendar(admin, monitor_engine, collector_engine, reader_engine) -> None:
+    closed_2026 = {
+        date(2026, 1, 1), date(2026, 2, 16), date(2026, 2, 17), date(2026, 4, 3), date(2026, 4, 21),
+        date(2026, 5, 1), date(2026, 6, 4), date(2026, 9, 7), date(2026, 10, 12), date(2026, 11, 2),
+        date(2026, 11, 20), date(2026, 12, 24), date(2026, 12, 25), date(2026, 12, 31),
+    }
+    national = [(1, 1), (4, 21), (5, 1), (9, 7), (10, 12), (11, 2), (11, 15), (11, 20), (12, 25)]
+    with Session(admin) as session:
+        rows = {row.day: row for row in session.scalars(select(TradingDay)).all()}
+    by_year = {year: [day for day in rows if day.year == year] for year in (2026, 2027, 2028)}
+    assert [len(by_year[year]) for year in (2026, 2027, 2028)] == [365, 365, 366] and len(rows) == 1096
+    weekday_closures = {year: {day for day in by_year[year] if not rows[day].is_open and day.weekday() < 5} for year in by_year}
+    assert weekday_closures[2026] == closed_2026
+    for year in (2027, 2028):
+        assert weekday_closures[year] == {date(year, month, day) for month, day in national if date(year, month, day).weekday() < 5}
+    assert all(not rows[day].is_open for day in rows if day.weekday() >= 5)
+    hours = {(rows[day].opens_at, rows[day].closes_at) for day in rows if rows[day].is_open and day != date(2026, 2, 18)}
+    assert hours == {(time(10, 0), time(17, 0))} and rows[date(2026, 2, 18)].opens_at == time(13, 0) and rows[date(2026, 2, 18)].closes_at == time(17, 0)
+    assert {rows[day].origin for day in by_year[2026]} == {"existing_configuration"}
+    assert {rows[day].origin for day in by_year[2027] + by_year[2028]} == {"national_holidays"}
+    assert rows[date(2028, 2, 29)].is_open and rows[date(2027, 2, 8)].is_open and rows[date(2027, 3, 26)].is_open
+    with Session(admin) as session:
+        calendar = load_calendar(session, date(2026, 12, 30), date(2027, 1, 4))
+    assert calendar.session_bounds(date(2026, 12, 31)) is None and calendar.session_bounds(date(2027, 1, 1)) is None
+    assert calendar.session_bounds(date(2027, 1, 4))[1] == datetime(2027, 1, 4, 17, 0, tzinfo=SAO_PAULO).astimezone(timezone.utc)
+    try:
+        calendar.session_bounds(date(2027, 1, 5))
+    except CalendarUnavailable as error:
+        assert error.year == 2027
+    else:
+        raise AssertionError("A day outside the loaded range was treated as covered")
+    with monitor_engine.connect() as connection:
+        assert connection.scalar(text("SELECT count(*) FROM trading_days")) == 1096
+    for engine, statement in [(monitor_engine, "DELETE FROM trading_days"), (monitor_engine, "UPDATE trading_days SET is_open = false, opens_at = NULL, closes_at = NULL"), (collector_engine, "SELECT 1 FROM trading_days"), (reader_engine, "SELECT 1 FROM trading_days")]:
+        try:
+            with engine.begin() as connection:
+                connection.execute(text(statement))
+        except DBAPIError as error:
+            assert error.orig.sqlstate == "42501"
+        else:
+            raise AssertionError("A role exceeded its trading calendar grants")
+
+
 def main() -> None:
     check_schedule()
     check_provider_contract()
@@ -133,6 +178,9 @@ def main() -> None:
     admin = create_engine(database_url())
     collector_engine = create_engine(settings.database_url(write=True))
     monitor_engine = create_engine(MonitorSettings.from_environment().database_url())
+    reader_engine = create_engine(settings.database_url())
+    check_calendar(admin, monitor_engine, collector_engine, reader_engine)
+    reader_engine.dispose()
     reader = {"Authorization": f"Bearer {settings.reader_token.get_secret_value()}"}
     collector = {"Authorization": f"Bearer {settings.collector_token.get_secret_value()}"}
     provider, clock, telemetry, stale = Provider(), Clock(), Telemetry(), {}
@@ -174,7 +222,7 @@ def main() -> None:
 
         def collect(symbol: str, observed_at: datetime) -> None:
             row = {"exchange": "MON", "symbol": symbol, "currency": "BRL", "source_symbol": "MON:" + symbol, "signal_kind": "analyst_consensus", "original_rating": "Strong Buy", "observed_price": "10", "daily_change_percent": "-1.5", "observed_at": observed_at.isoformat()}
-            payload = {"client_collection_id": str(uuid4()), "source_id": source["id"], "source_url": "https://example.invalid/synthetic", "observed_at": observed_at.isoformat(), "market_session_date": "2026-03-16", "status": "complete", "observations": [row, {**row, "symbol": symbol + "X", "original_rating": "Neutral"}]}
+            payload = {"client_collection_id": str(uuid4()), "source_id": source["id"], "source_url": "https://example.invalid/synthetic", "observed_at": observed_at.isoformat(), "market_session_date": "2026-03-16", "status": "complete", "schema_version": 2, "rows_examined": 2, "observations": [row]}
             response = client.post("/v1/collections", headers=collector, json=payload)
             assert response.status_code == 200, response.text
 
@@ -299,17 +347,47 @@ def main() -> None:
         cycle(at(4, 14, 10, 30), AAAA=quote("AAAA3", "30", at(4, 14, 10, 20)))
         assert provider.calls == ["EEEE3"] and len(events_of(final.id)) == 1 and quotes_of("AAAA3") == 3
 
+        gap = date(2027, 1, 6)
+        columns = "is_open, opens_at, closes_at, description, origin, source_reference, consulted_on"
+        with admin.begin() as connection:
+            removed = dict(connection.execute(text(f"DELETE FROM trading_days WHERE day = :day RETURNING {columns}"), {"day": gap}).mappings().one())
         summary = cycle(at(12, 14, 10, 30), EEEE=quote("EEEE3", "40", at(12, 14, 10, 20)))
         pending = run_of("EEEE3")
         assert summary["recorded"] == 1 and pending.status == "prepared" and pending.reference_price is None and pending.expires_at is None, summary
         assert count(TriggerLevel, TriggerLevel.tracking_run_id == pending.id) == 0 and quotes_of("EEEE3") == 1
-        clock.now = datetime(2027, 1, 4, 14, 0, tzinfo=timezone.utc)
+        with admin.begin() as connection:
+            connection.execute(text(f"INSERT INTO trading_days (day, {columns}) VALUES (:day, :is_open, :opens_at, :closes_at, :description, :origin, :source_reference, :consulted_on)"), {"day": gap, **removed})
+        year_end_close = datetime(2027, 1, 14, 17, 0, tzinfo=SAO_PAULO).astimezone(timezone.utc)
+        summary = cycle(at(12, 14, 11, 0), EEEE=quote("EEEE3", "41", at(12, 14, 10, 50)))
+        crossing = run_of("EEEE3")
+        assert summary["recorded"] == 1 and crossing.status == "active" and crossing.activated_at == at(12, 14, 10, 50) and crossing.expires_at == year_end_close, crossing.expires_at
+        statements: list[str] = []
+
+        def record(connection, cursor, statement, parameters, context, executemany) -> None:
+            statements.append(statement)
+
+        event.listen(admin, "before_cursor_execute", record)
+        with Session(admin) as session:
+            assert window_close(session, at(12, 14, 10, 50), 20) == year_end_close
+            assert window_close(session, at(12, 14, 10, 50), 1) == at(12, 14, 17)
+        event.remove(admin, "before_cursor_execute", record)
+        assert len(statements) == 2 and all("trading_days" in statement for statement in statements), statements
+        changed = date(2027, 1, 5)
+        with admin.begin() as connection:
+            connection.execute(text("UPDATE trading_days SET is_open = false, opens_at = NULL, closes_at = NULL WHERE day = :day"), {"day": changed})
+        cycle(at(12, 15, 10, 30), EEEE=quote("EEEE3", "41.1", at(12, 15, 10, 20)))
+        with Session(admin) as session:
+            assert window_close(session, at(12, 14, 10, 50), 20) == datetime(2027, 1, 15, 17, 0, tzinfo=SAO_PAULO).astimezone(timezone.utc)
+        assert run_of("EEEE3").expires_at == year_end_close and quotes_of("EEEE3") == 3
+        with admin.begin() as connection:
+            connection.execute(text("UPDATE trading_days SET is_open = true, opens_at = '10:00', closes_at = '17:00' WHERE day = :day"), {"day": changed})
+        clock.now = datetime(2025, 12, 30, 14, 0, tzinfo=timezone.utc)
         provider.calls = []
         assert run_cycle(monitor_engine, provider, 2, stale, telemetry, clock)["outcome"] == "calendar_unavailable" and provider.calls == []
 
         with Session(admin) as session:
             legacy = session.get(TrackingRun, webhook_run_id)
-            assert legacy.status == "active" and legacy.admitted_at is None and legacy.expires_at < clock.now
+            assert legacy.status == "active" and legacy.admitted_at is None and legacy.expires_at < at(12, 15, 10, 30)
 
         with admin.connect() as holder:
             holder.execute(text("SELECT pg_advisory_lock(hashtextextended('stock_radar:monitor_cycle', 0))"))

@@ -169,9 +169,10 @@ never immediately at startup, so a restart cannot burst requests. The times are 
 session opening at 10:00 the cycles run at 10:10, 10:40, 11:10 and so on, which leaves the provider ten
 minutes after the open to publish a quote from the current session. A session-level advisory lock ensures one cycle at a time across the service and the manual command.
 Each cycle first expires runs whose window ended, even when the market is closed or the provider is down.
-Outside a B3 session, or in a year without a versioned calendar, it makes no external call and logs
-`market_closed` in the cycle summary for a known closure, or `calendar_unavailable` with a warning of the
-same name when the year has no versioned calendar. During a session it admits waiting
+Each cycle reads the days around the current date from the `trading_days` table in one query. Outside a
+session, or on a date the table does not cover, it makes no external call and logs `market_closed` in the
+cycle summary for a known closure, or `calendar_unavailable` with a warning of the same name when the date
+has no row. The table covers 2026 to 2028; `make db-access` grants the monitor read access to it. During a session it admits waiting
 runs up to `MONITOR_MAX_INSTRUMENTS`, then makes one sequential request per monitored instrument with no
 database transaction open, and applies each accepted quote in its own short transaction. A failure for one
 instrument is logged and the others continue. The clock and the session are checked again immediately before
@@ -184,6 +185,37 @@ Recover a run that never gets a valid quote with `POST /v1/tracking-runs/{id}/ca
 `cancel_tracking_run` tool; there is no automatic expiry of prepared runs. The stale-quote counter lives in
 process memory and restarts from zero with the process. No live request, VPS deployment or persistent
 migration has been performed for this increment. See [experiment rules](experiment.md) for acceptance rules.
+
+## Pruning a legacy collection
+
+Collections registered before schema version 2 stored every row of the list. `stock_radar.db.prune_collection`
+removes the observations of one such collection that are not eligible and keeps the eligible ones with their
+tracking runs. It runs with the administrator credentials of the `migrations` service, so no DELETE privilege
+is granted to the collector and no API or MCP tool deletes anything.
+
+```sh
+docker compose --project-name <PROJECT> --env-file <ENV_FILE> run --rm --entrypoint python migrations \
+  -m stock_radar.db.prune_collection --collection-id <UUID> \
+  --expected-total <N> --expected-eligible <N> --expected-symbols <TICKER,TICKER>
+```
+
+Without `--apply` it is a dry run: it prints the observed counts and the plan and changes nothing. Add
+`--apply` to execute. It locks the collection row, works in one transaction and aborts with exit code 1,
+changing nothing, when:
+
+- the collection does not exist;
+- the number of observations, the number of eligible observations or the set of eligible tickers differs
+  from the expected values given on the command line;
+- the collection already records `rows_examined`, which means it is not a legacy collection or was pruned;
+- any tracking run references an observation that would be removed;
+- the number of rows removed or kept differs from the plan.
+
+When applied it deletes only `signal_observations` rows of that collection and sets its `rows_examined` to
+the previous number of observations. The collection row, its `payload_hash`, instruments, sources, other
+collections, quotes, tracking runs and trigger events are not touched. Instruments that were referenced only
+by removed observations remain. The receipt afterwards reports the kept rows as both `observation_count` and
+`eligible_count`. The original payload of such a collection is version 1 and can no longer be resent.
+Take a database backup before applying it to a persistent database.
 
 ## Diagnostics
 

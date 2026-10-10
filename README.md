@@ -5,7 +5,7 @@ Track stock recommendations, monitor price triggers, and analyze outcomes to mea
 ## Current status
 
 **Local REST and MCP backend with synthetic validation.** PostgreSQL, Python and all checks run in
-Docker. Eleven normalized tables use random UUID primary keys and Alembic migrations. FastAPI and the
+Docker. Twelve normalized tables use random UUID primary keys and Alembic migrations. FastAPI and the
 official MCP SDK share services for sources, atomic collection ingestion, signal queries, status and
 quality reports, with separate reader and collector permissions. An authenticated webhook inbox deduplicates notifications and processes existing alert mappings.
 Eligible signals now create reusable tracking runs, and a single Docker monitoring process can poll brapi

@@ -31,7 +31,7 @@ def main() -> None:
                     cursor.execute("GRANT UPDATE (status, processing_attempts, processed_at, last_error_code) ON webhook_receipts TO stock_radar_webhook")
                     cursor.execute("GRANT UPDATE (webhook_receipt_id, price_quote_id, occurred_at, observed_price, evidence_quality) ON trigger_events TO stock_radar_webhook")
                 elif role == "stock_radar_monitor":
-                    cursor.execute("GRANT SELECT ON sources, instruments, signal_observations, experiments, experiment_versions, tracking_runs, trigger_levels, trigger_events, price_quotes TO stock_radar_monitor")
+                    cursor.execute("GRANT SELECT ON sources, instruments, signal_observations, experiments, experiment_versions, tracking_runs, trigger_levels, trigger_events, price_quotes, trading_days TO stock_radar_monitor")
                     cursor.execute("GRANT INSERT ON sources, price_quotes, trigger_levels, trigger_events TO stock_radar_monitor")
                     cursor.execute("GRANT UPDATE (status, admitted_at, reference_price, reference_at, reference_source_id, reference_evidence, activated_at, expires_at, price_coverage, coverage_evidence) ON tracking_runs TO stock_radar_monitor")
                 else:

@@ -1,7 +1,8 @@
 # Stock Radar plugin
 
-Collects the daily TradingView list of Brazilian biggest losers, with analyst ratings, from the user's own
-Chrome in Claude Cowork and registers it in the Stock Radar service through MCP tools. Version 0.5.0.
+Reads the whole daily TradingView list of Brazilian biggest losers in the user's own Chrome in Claude
+Cowork and registers in the Stock Radar service, through MCP tools, only the stocks whose analyst rating
+is `Viés de alta forte` and whose daily change is negative. Other rows are counted and not stored. Version 0.6.0.
 
 Status: version 0.2.1 was installed in Cowork by the owner, who saw the four skills and the correct report
 of missing MCP tools. Version 0.5.0 adds a local Python bridge to the owner's Stock Radar service. The
@@ -12,7 +13,7 @@ not validated yet. See `docs/plugin.md` in the repository.
 
 | Skill | What it does |
 |---|---|
-| `collect-signals` | Reads the losers table in Chrome, builds one collection payload and calls `register_collection`. Confirms the result from the receipt. |
+| `collect-signals` | Examines the whole losers table in Chrome, keeps the Strong Buy analyst rows with a negative daily change, builds one collection payload and calls `register_collection`. Confirms the result from the receipt. |
 | `check-status` | Read-only view of service availability, collection receipts, quality counts and tracking state. |
 | `analyze-results` | Read-only description of stored signals, runs and recorded hits. No computed performance metrics exist yet. |
 | `prepare-triggers` | View of tracking runs, plus cancellation of one run on explicit request. Tracking is prepared by the backend; this skill prepares nothing. |
@@ -48,7 +49,7 @@ Once per computer. Nothing is installed at start or per call.
 1. Check for Python 3.10 or later: `python3 --version`. If it is missing or older, install a current
    Python from python.org first. No other tool is required.
 2. Extract the archive to a temporary folder, to reach the bridge files:
-   `unzip -o -q stock-radar-0.5.0.zip -d /tmp/stock-radar-plugin`
+   `unzip -o -q stock-radar-0.6.0.zip -d /tmp/stock-radar-plugin`
 3. Create the dedicated environment and install the pinned, hash-checked dependencies:
    `python3 -m venv "$HOME/Library/Application Support/stock-radar/bridge"`
    `"$HOME/Library/Application Support/stock-radar/bridge/bin/python" -m pip install --require-hashes --only-binary :all: -r /tmp/stock-radar-plugin/mcp/requirements.txt`
@@ -73,7 +74,7 @@ skill reports the connector as unavailable and stops, without simulating a colle
 
 ## Data
 
-The plugin reads one public market list in the user's browser session and sends, for each row, the symbol,
+The plugin reads one public market list in the user's browser session and sends, for each qualified row, the symbol,
 displayed price, daily change, rating label and the displayed text of those cells, plus the page URL and
 read times, to the user's own Stock Radar service through the bridge. The plugin stores nothing itself and
 downloads nothing at run time. It contains no tokens, database credentials, captures or real observations. The price monitor's brapi key is not needed here.

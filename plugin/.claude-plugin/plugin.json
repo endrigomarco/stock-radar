@@ -1,8 +1,8 @@
 {
   "name": "stock-radar",
   "displayName": "Stock Radar",
-  "version": "0.5.0",
-  "description": "Collect the daily TradingView list of Brazilian biggest losers with analyst ratings from the user's Chrome and register it in the Stock Radar service through its MCP tools. Includes status and evidence skills. Bundles a local Python bridge that forwards MCP calls to the owner's Stock Radar service over a private network; the credential stays in the macOS Keychain and is not part of the package.",
+  "version": "0.6.0",
+  "description": "Read the daily TradingView list of Brazilian biggest losers in the user's Chrome and register in the Stock Radar service, through its MCP tools, only the stocks with a Strong Buy analyst rating and a negative daily change. Includes status and evidence skills. Bundles a local Python bridge that forwards MCP calls to the owner's Stock Radar service over a private network; the credential stays in the macOS Keychain and is not part of the package.",
   "author": {
     "name": "Endrigo Marco"
   },

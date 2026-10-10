@@ -42,13 +42,14 @@ Eligible observations create or reuse one open tracking run per instrument and e
 process polls brapi every 30 minutes during B3 sessions for at most 30 instruments, locks the reference at
 the first valid quote, creates six levels, records first observed hits and ends runs by completion, expiry
 or cancellation. REST and MCP expose runs, latest quotes, hits and cancellation. Validated with a fake
-provider and disposable PostgreSQL only. Pending: a first authorized live cycle from the container, the 2027
-calendar, confirmation of B3 hours after the next change, and deployment. External webhooks are deferred.
+provider and disposable PostgreSQL only. The trading calendar is a PostgreSQL table covering 2026 to 2028.
+Pending: a first authorized live cycle from the container, official B3 calendars for 2027 and 2028 in place of
+the national holiday basis, confirmation of B3 hours after the next change, and deployment. External webhooks are deferred.
 
 ## 4. MCP and plugin connection
 
 The local read tools and authorized ingestion path exist. The plugin package for collection is prepared
-(version 0.5.0) with a bundled Python bridge from stdio to the service's MCP endpoint over the private
+(version 0.6.0) with a bundled Python bridge from stdio to the service's MCP endpoint over the private
 network. Installation and skill discovery in Cowork were confirmed by the owner for 0.2.1. The backend and
 PostgreSQL belong on the VPS. The bridge passed synthetic checks; whether Cowork starts it is not yet
 validated; see [plugin](plugin.md). Connect the plugin to an authorized test service.

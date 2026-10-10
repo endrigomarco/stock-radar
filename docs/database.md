@@ -2,7 +2,7 @@
 
 ## Implementation status
 
-Eleven normalized tables are defined in `src/stock_radar/db/models.py` by the initial Alembic revision
+Twelve normalized tables are defined in `src/stock_radar/db/models.py` by the initial Alembic revision
 `807ca9561c9f` and the quote monitoring revision `b4d1c7e9a2f3`. They support multiple sources, shared
 instruments and multiple versioned experiments.
 The revision was applied to the local development database on 2026-10-07; Alembic reported no model/schema
@@ -70,7 +70,7 @@ That capability is structural only: no additional analysis methods or generic st
 |---|---|---|
 | `sources` | `code`, `name`, optional `base_url`; reusable provider identity | Unique nonblank `code` |
 | `instruments` | `exchange`, `symbol`, `currency`, optional `name`; traded instrument | Unique `(exchange, symbol)`; nonblank identity; three uppercase currency letters |
-| `collection_runs` | Source FK, `client_collection_id`, `payload_hash`, source URL, observed/received timestamps, session date, status, optional source total, filters | Unique `(source_id, client_collection_id)`; SHA-256 hex shape; allowed status; nonnegative total |
+| `collection_runs` | Source FK, `client_collection_id`, `payload_hash`, source URL, observed/received timestamps, session date, status, optional source total, optional rows examined, filters | Unique `(source_id, client_collection_id)`; SHA-256 hex shape; allowed status; nonnegative total |
 | `signal_observations` | Collection and instrument FKs, signal kind, original symbol/column/rating, normalized rating and mapping version, observed price/change, timestamps, parse status, raw and quality evidence | Unique `(collection_run_id, instrument_id, signal_kind)`; positive supplied price; change at least -100%; allowed parse status |
 | `experiments` | `code`, `name`, optional description; stable hypothesis identity | Unique nonblank `code` |
 | `experiment_versions` | Experiment FK, positive `version`, nonblank `analysis_kind`, rule snapshot | Unique `(experiment_id, version)`; rules must be a JSON object |
@@ -78,6 +78,7 @@ That capability is structural only: no additional analysis methods or generic st
 | `trigger_levels` | Tracking FK, signed percentage, mathematical and configured prices, rounding policy, alert identity/provider/activation/expiry/evidence | Unique `(tracking_run_id, signed_percent)` and `alert_mapping_id`; nonzero percentage above -100%; positive supplied prices; valid alert window |
 | `webhook_receipts` | Source FK, deduplication key, optional provider event ID and reported mapping UUID, event/receipt times, sanitized payload, processing status/attempts/errors | Unique `(source_id, deduplication_key)`; nonblank deduplication key; nonnegative attempts |
 | `price_quotes` | Instrument and source FKs, price, provider market time `quoted_at`, `received_at` | Unique `(instrument_id, source_id, quoted_at)`; positive price |
+| `trading_days` | `day`, `is_open`, local `opens_at` and `closes_at`, description, `origin`, `source_reference`, `consulted_on`; one row per covered calendar day | Unique `day`; hours present exactly when open, opening before closing; `origin` in `existing_configuration`, `b3_official`, `national_holidays` |
 | `trigger_events` | Level FK and exactly one of receipt FK or price quote FK, supported occurrence time, observed price, evidence quality | Unique `trigger_level_id`; positive supplied price; allowed evidence quality; exactly one evidence reference |
 
 No extra status, currency, percentage or rating lookup tables are needed. Signal and analysis kinds are
@@ -164,7 +165,7 @@ grants on experiments and tracking runs.
 ## Code-first workflow
 
 SQLAlchemy models are the source of the intended schema. `src/stock_radar/db/models.py` owns the
-shared declarative Base and currently defines all eleven mapped models. Alembic loads its
+shared declarative Base and currently defines all twelve mapped models. Alembic loads its
 metadata through `migrations/env.py`. No table creation occurs on import or application startup.
 Use Alembic revisions, not `Base.metadata.create_all()`, to evolve persistent databases.
 

@@ -2,74 +2,73 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from stock_radar.db.models import TradingDay
+
 MARKET_TIMEZONE = ZoneInfo("America/Sao_Paulo")
-SATURDAY = 5
+ONE_DAY = timedelta(days=1)
+
+SessionBounds = tuple[datetime, datetime]
 
 
 class CalendarUnavailable(Exception):
     def __init__(self, year: int) -> None:
-        super().__init__(f"No versioned B3 calendar for {year}")
+        super().__init__(f"No trading calendar coverage for {year}")
         self.year = year
 
 
 @dataclass(frozen=True)
-class TradingHours:
-    effective_from: date
-    opens: time
-    closes: time
+class TradingCalendar:
+    days: dict[date, SessionBounds | None]
+
+    def session_bounds(self, day: date) -> SessionBounds | None:
+        if day not in self.days:
+            raise CalendarUnavailable(day.year)
+        return self.days[day]
+
+    def in_session(self, instant: datetime) -> bool:
+        bounds = self.session_bounds(market_date(instant))
+        return bounds is not None and bounds[0] <= instant <= bounds[1]
+
+    def polling_open(self, instant: datetime) -> bool:
+        bounds = self.session_bounds(market_date(instant))
+        return bounds is not None and bounds[0] <= instant < bounds[1]
 
 
-@dataclass(frozen=True)
-class YearCalendar:
-    closed: frozenset[date]
-    late_openings: dict[date, time]
-    hours: tuple[TradingHours, ...]
+def market_date(instant: datetime) -> date:
+    return instant.astimezone(MARKET_TIMEZONE).date()
 
 
-CALENDARS: dict[int, YearCalendar] = {
-    2026: YearCalendar(
-        closed=frozenset({
-            date(2026, 1, 1), date(2026, 2, 16), date(2026, 2, 17), date(2026, 4, 3), date(2026, 4, 21),
-            date(2026, 5, 1), date(2026, 6, 4), date(2026, 9, 7), date(2026, 10, 12), date(2026, 11, 2),
-            date(2026, 11, 20), date(2026, 12, 24), date(2026, 12, 25), date(2026, 12, 31),
-        }),
-        late_openings={date(2026, 2, 18): time(13, 0)},
-        hours=(TradingHours(date(2026, 1, 1), time(10, 0), time(17, 0)),),
-    ),
-}
+def load_calendar(session: Session, first: date, last: date | None = None) -> TradingCalendar:
+    statement = select(TradingDay.day, TradingDay.is_open, TradingDay.opens_at, TradingDay.closes_at).where(TradingDay.day >= first)
+    if last is not None:
+        statement = statement.where(TradingDay.day <= last)
+    rows = session.execute(statement.order_by(TradingDay.day)).all()
+    return TradingCalendar({row.day: _bounds(row.day, row.opens_at, row.closes_at) if row.is_open else None for row in rows})
 
 
-def session_bounds(day: date) -> tuple[datetime, datetime] | None:
-    calendar = CALENDARS.get(day.year)
-    if calendar is None:
-        raise CalendarUnavailable(day.year)
-    if day.weekday() >= SATURDAY or day in calendar.closed:
-        return None
-    hours = [item for item in calendar.hours if item.effective_from <= day][-1]
-    opens = calendar.late_openings.get(day, hours.opens)
-    return _instant(day, opens), _instant(day, hours.closes)
+def load_around(session: Session, instant: datetime) -> TradingCalendar:
+    day = market_date(instant)
+    return load_calendar(session, day - ONE_DAY, day + ONE_DAY)
 
 
-def in_session(instant: datetime) -> bool:
-    bounds = session_bounds(instant.astimezone(MARKET_TIMEZONE).date())
-    return bounds is not None and bounds[0] <= instant <= bounds[1]
-
-
-def polling_open(instant: datetime) -> bool:
-    bounds = session_bounds(instant.astimezone(MARKET_TIMEZONE).date())
-    return bounds is not None and bounds[0] <= instant < bounds[1]
-
-
-def window_close(activated_at: datetime, sessions: int) -> datetime:
-    day = activated_at.astimezone(MARKET_TIMEZONE).date()
+def window_close(session: Session, activated_at: datetime, sessions: int) -> datetime:
+    day = market_date(activated_at)
+    calendar = load_calendar(session, day)
     remaining = sessions
     while True:
-        bounds = session_bounds(day)
+        bounds = calendar.session_bounds(day)
         if bounds is not None:
             remaining -= 1
             if remaining == 0:
                 return bounds[1]
-        day += timedelta(days=1)
+        day += ONE_DAY
+
+
+def _bounds(day: date, opens: time, closes: time) -> SessionBounds:
+    return _instant(day, opens), _instant(day, closes)
 
 
 def _instant(day: date, moment: time) -> datetime:

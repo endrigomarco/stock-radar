@@ -288,3 +288,63 @@ Not validated: the bridge against the real endpoint, the Keychain read with a re
 the bridge, tool discovery and `service_status` from a Cowork task, and Python 3.10 to 3.12. The complete
 `make test` was not rerun for this increment because no application code changed; the new check was run
 alone in the same image.
+
+
+## Qualified observations only
+
+Collection schema version 2: the collector sends only Strong Buy analyst rows with a negative daily change
+and the service rejects a collection that contains any other row. `tests/check_collection_rules.py` is part
+of `make test` and uses synthetic rows only.
+
+Validated on 2026-10-09 with the complete disposable Docker suite, including the new migration and the
+schema drift check:
+
+- a qualified row together with, or replaced by, each of these is rejected with `observation_not_eligible`
+  and stores nothing, not even the collection or the instrument: another analyst label, an empty rating, a
+  technical rating carrying the Strong Buy label, and a zero, positive or missing daily change;
+- qualified rows alone are stored, with `observation_count` equal to `eligible_count`, the sent
+  `rows_examined` and `source_total` in the receipt, one tracking run each, and labels preserved as sent;
+- an identical repeat returns the same receipt with `duplicate: true` and the same identifier with other
+  content returns 409;
+- a complete collection with no observation is accepted and is idempotent;
+- `rows_examined` below the number of observations, a complete collection whose `rows_examined` differs from
+  `source_total`, a missing `rows_examined` and schema version 1 are rejected as invalid requests;
+- pruning a synthetic legacy collection: the dry run changes nothing; wrong expected totals, eligible counts
+  or tickers, an unknown collection, a collection of version 2 and a tracking run on a removable observation
+  each abort without changes; applying removes only the ineligible observations of that collection, keeps
+  the eligible ones and their tracking run, records `rows_examined`, leaves instruments and other
+  collections untouched, and a second run aborts.
+
+The packaged example was validated against `CollectionInput`. Plugin version 0.6.0 was packaged and checked.
+
+Not validated: the migration and the pruning on the VPS, the collection the owner reported
+(`2776fe1c-bf06-4cb4-a536-1fe0e13c4674`, 51 observations, 3 eligible), and the changed skill in Cowork
+against the real page. No real data was used.
+
+## Trading calendar in PostgreSQL
+
+The calendar moved from code to the `trading_days` table. `tests/check_monitoring.py` reads the rows the
+migration inserts and drives the monitor against them; `tests/check_migrations.py` covers upgrade, downgrade
+and schema drift for the new table.
+
+Validated on 2026-10-09 with the complete disposable Docker suite:
+
+- 365, 365 and 366 rows for 2026, 2027 and 2028; every weekend closed; 29 February 2028 open;
+- 2026 preserved: the same 14 weekday closures, 13:00 opening on 18 February and 10:00 to 17:00 on every
+  other session, with the existing monitor checks for a holiday, a weekend, the late opening, the close and
+  a 20 session expiry unchanged and passing against the table;
+- 2027 and 2028: weekday closures are exactly the national holidays, and Carnival Monday and Good Friday of
+  2027 are open, as the authorized basis implies;
+- year change: a run activated on 14 December 2026 expires at the close of 14 January 2027, the 20th
+  session counted by hand, including the activation day;
+- the 20 session count executes one SQL statement;
+- internal gap: with the row of 6 January 2027 removed the same quote leaves the run prepared, and it
+  activates once the row is back;
+- preserved expiry: after 5 January 2027 is changed to closed, a new calculation gives 15 January while the
+  active run keeps its stored `expires_at`;
+- a date with no row gives `calendar_unavailable` and no provider call, and a day outside a loaded range is
+  not treated as covered;
+- the monitor role reads `trading_days` and cannot update or delete it; collector and reader cannot read it.
+
+Not validated: the migration on any persistent database or on the VPS, real sessions of 2027 and 2028, and
+the official hours outside the configured 10:00 to 17:00. No provider was called.

@@ -118,8 +118,8 @@ errors. It has no HTTP listener and exports no Prometheus metrics; `/metrics` co
 | `monitor_cycle` | INFO | Cycle summary: outcome (`completed`, `market_closed`, `session_ended`, `calendar_unavailable`), expired, admitted, instruments, recorded, unchanged, rejected, failed, skipped, stale symbols |
 | `monitor_cycle_skipped` | WARNING | Another cycle held the lock |
 | `monitor_disabled`, `monitor_configuration_invalid` | WARNING, ERROR | Process started without explicit enablement or with invalid settings |
-| `calendar_unavailable` | WARNING | No versioned calendar for the current year; polling suspended |
-| `calendar_coverage_missing` | WARNING | A run could not be activated because its 20 sessions are not covered |
+| `calendar_unavailable` | WARNING | No `trading_days` row for the current date; polling suspended |
+| `calendar_coverage_missing` | WARNING | A run could not be activated because `trading_days` lacks a row before its 20th session |
 | `quote_failed` | WARNING | Provider or payload failure for one instrument, with a safe code |
 | `quote_rejected` | WARNING, or INFO for `quote_too_old` | Quote failed temporal validation and was not stored |
 | `quote_stale` | WARNING | Five or more consecutive cycles without a newer accepted quote for an instrument |

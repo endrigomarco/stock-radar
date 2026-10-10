@@ -49,20 +49,46 @@ An instrument brapi does not know fails on every cycle and keeps its slot until 
 
 ## B3 calendar and hours
 
-`src/stock_radar/market_calendar.py` holds a static calendar read from B3 on 2026-10-08: the
-[trading calendar](https://www.b3.com.br/pt_br/solucoes/plataformas/puma-trading-system/para-participantes-e-traders/calendario-de-negociacao/feriados/)
-and the [equities trading hours](https://www.b3.com.br/pt_br/solucoes/plataformas/puma-trading-system/para-participantes-e-traders/horario-de-negociacao/acoes/).
-For 2026 there is no equities session on 1 January, 16 and 17 February, 3 and 21 April, 1 May, 4 June,
-7 September, 12 October, 2 and 20 November, 24, 25 and 31 December, and trading starts at 13:00 on
-18 February. A session runs from 10:00 to 17:00 America/Sao_Paulo, the end of the closing call.
+The monitor and the 20 session window read the same PostgreSQL table, `trading_days`, filled by migration
+`d2f6a9c4b810` with one row for every calendar day of 2026, 2027 and 2028. A closed day is a row with
+`is_open` false. A date with no row has no coverage. Nothing consults a calendar service, a web page or a
+model at runtime, and the migration reads no external source. Each row records its `origin`, a
+`source_reference` and the date of consultation, 2026-10-09.
 
-Two limits apply. B3 had not published 2027 on that date, so no 2027 calendar is versioned: runs whose
-20 sessions would cross into 2027 (activation from early December 2026) stay prepared, and polling stops
-entirely in 2027 until the calendar is added. The hours page states no validity period and B3 usually
-changes hours around the United States daylight saving transitions. The single 2026 hours entry is therefore
-confirmed only for the published grid; add a dated `TradingHours` entry when B3 announces a change. Until
-then a later close would only shorten observation: polling stops at 17:00 and quotes timed after it are
-rejected with a warning. Nothing consults a calendar service or a model at runtime.
+| Year | `origin` | What the rows hold |
+|---|---|---|
+| 2026 | `existing_configuration` | The calendar previously coded in `src/stock_radar/market_calendar.py`, unchanged |
+| 2027, 2028 | `national_holidays` | Weekends and national holidays closed, every other day open |
+
+2026. No equities session on 1 January, 16 and 17 February, 3 and 21 April, 1 May, 4 June, 7 September,
+12 October, 2 and 20 November, 24, 25 and 31 December; trading starts at 13:00 on 18 February. These dates
+match B3 Oficio Circular 003/2026-VNC of 2026-01-08 and its errata 041/2026-VNC of 2026-06-30, and the
+[trading calendar](https://www.b3.com.br/pt_br/solucoes/plataformas/puma-trading-system/para-participantes-e-traders/calendario-de-negociacao/feriados/).
+The hours are the configured 10:00 to 17:00 America/Sao_Paulo for the whole year. That is not the official
+grid for every date: B3 Oficio Circular 005/2026-PRE states 10:00 to 17:00, including the closing call, from
+2026-03-09, linked to United States daylight saving time; before that date the official close was later, and
+the grid after the November 2026 change had not been published on the consultation date. The rows are
+therefore labelled as the preserved configuration, not as a reproduction of B3. A later official close only
+shortens observation: polling stops at 17:00 and quotes timed after it are rejected with a warning.
+
+2027 and 2028. No B3 calendar for these years was found on 2026-10-09: the calendar page ended at 2026 and
+no circular was located. That is the result of a search, not proof that none exists. As authorized by the
+owner, the rows use national holidays only: 1 January, 21 April, 1 May, 7 September, 12 October,
+2 November, 15 November, 20 November and 25 December, from Lei 662/1949 as amended by Lei 10.607/2002,
+Lei 6.802/1980 and Lei 14.759/2023. The texts of these laws could not be opened during implementation and
+the list was not re-read. Hours are the standard 10:00 to 17:00.
+
+This basis can differ from the sessions B3 actually holds. Optional days and municipal holidays are not
+included, so Carnival Monday and Tuesday, Good Friday, Corpus Christi, 24 December and 31 December count as
+sessions in 2027 and 2028, and Ash Wednesday has no late opening. On such a day, if B3 is closed, the
+monitor polls and receives no quote from a current session, so nothing is recorded. A run whose window
+crosses such a day reaches its 20th counted session earlier than it would by real sessions, and expires
+earlier. The same applies to a hours change that B3 announces later.
+
+Correction. When B3 publishes a calendar, or a difference is found, a later migration updates the affected
+rows and sets `origin` to `b3_official`. There is no automatic update. `expires_at` of a run that is already
+active is never recalculated, so a correction changes only future activations; review the active runs whose
+window crosses a corrected date when writing that migration.
 
 ## Claude Cowork and plugin
 

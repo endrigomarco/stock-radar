@@ -1,9 +1,10 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Time,
     UniqueConstraint,
     Uuid,
     func,
@@ -69,6 +71,7 @@ class CollectionRun(IdentityMixin, Base):
         UniqueConstraint("source_id", "client_collection_id"),
         CheckConstraint("status IN ('complete', 'partial', 'failed')", name="status_valid"),
         CheckConstraint("source_total IS NULL OR source_total >= 0", name="source_total_nonnegative"),
+        CheckConstraint("rows_examined IS NULL OR rows_examined >= 0", name="rows_examined_nonnegative"),
         CheckConstraint("payload_hash ~ '^[0-9a-f]{64}$'", name="payload_hash_sha256"),
         Index("ix_collection_runs_source_observed", "source_id", "observed_at"),
     )
@@ -82,6 +85,7 @@ class CollectionRun(IdentityMixin, Base):
     market_session_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(16))
     source_total: Mapped[int | None] = mapped_column(Integer)
+    rows_examined: Mapped[int | None] = mapped_column(Integer)
     filters: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
 
 
@@ -241,3 +245,26 @@ class TriggerEvent(IdentityMixin, Base):
     occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     observed_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 8))
     evidence_quality: Mapped[str] = mapped_column(String(16), server_default="unknown")
+
+
+class TradingDay(IdentityMixin, Base):
+    __tablename__ = "trading_days"
+    __table_args__ = (
+        UniqueConstraint("day"),
+        CheckConstraint(
+            "(is_open AND opens_at IS NOT NULL AND closes_at IS NOT NULL AND opens_at < closes_at) "
+            "OR (NOT is_open AND opens_at IS NULL AND closes_at IS NULL)",
+            name="hours_match_open",
+        ),
+        CheckConstraint("origin IN ('existing_configuration', 'b3_official', 'national_holidays')", name="origin_valid"),
+        CheckConstraint("length(trim(source_reference)) > 0", name="source_reference_not_blank"),
+    )
+
+    day: Mapped[date] = mapped_column(Date)
+    is_open: Mapped[bool] = mapped_column(Boolean)
+    opens_at: Mapped[time | None] = mapped_column(Time)
+    closes_at: Mapped[time | None] = mapped_column(Time)
+    description: Mapped[str | None] = mapped_column(Text)
+    origin: Mapped[str] = mapped_column(String(32))
+    source_reference: Mapped[str] = mapped_column(Text)
+    consulted_on: Mapped[date] = mapped_column(Date)

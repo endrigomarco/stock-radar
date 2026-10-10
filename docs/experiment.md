@@ -22,7 +22,10 @@ proposal of separate daily tracking runs.
   session and not earlier than the origin observation. Until then the run stays `prepared` with no reference.
   The reference never changes afterwards.
 - Window: 20 B3 sessions including the activation session, read from the experiment version. It ends at the
-  close of the 20th session. If the versioned calendar does not cover all 20 sessions the run is not activated.
+  close of the 20th session, counted in the `trading_days` table. If that table has no row for any day up to the
+  20th session the run is not activated. The expiry is stored at activation and is not recalculated when the
+  calendar is corrected later. For 2027 and 2028 the table holds national holidays only; see
+  [integrations](integrations.md) for how that can shorten a window.
 - A level is reached when the quote price is greater than or equal to a positive threshold, or less than or
   equal to a negative one. Thresholds are `reference * (1 + percent / 100)` in Decimal. Only our reference is
   used; provider change percentages and daily highs or lows are ignored.

@@ -5,7 +5,7 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.5.0, prepared on 2026-10-09 for Claude Cowork on the MacBook Pro.
+Version 0.6.0, prepared on 2026-10-09 for Claude Cowork on the MacBook Pro.
 
 | State | Scope |
 |---|---|
@@ -24,7 +24,7 @@ VPS. The MacBook needs Python and the bridge dependencies only; no Docker, Node.
 
 | Skill | Role | Tools it expects |
 |---|---|---|
-| collect-signals | Browser observations and one additive collection | `service_status`, `list_sources`, `register_source`, `register_collection`, `get_collection` |
+| collect-signals | Examine the whole list and register only Strong Buy analyst rows with a negative daily change | `service_status`, `list_sources`, `register_source`, `register_collection`, `get_collection` |
 | check-status | Read service, receipts, quality counts and tracking state | `service_status`, `data_quality_report`, `get_collection`, tracking list tools |
 | analyze-results | Describe stored signals, runs and hits | `list_signals`, tracking list tools |
 | prepare-triggers | Read tracking runs; cancel one on explicit request | `list_tracking_runs`, `cancel_tracking_run` |
@@ -117,7 +117,7 @@ Steps run by the owner. Record the real results in [testing](testing.md).
    the dedicated environment, the Keychain item created with the prompting form of `security`, and the
    terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
 2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
-   `stock-radar-0.5.0.zip`, then quit and reopen the app.
+   `stock-radar-0.6.0.zip`, then quit and reopen the app.
 3. In a new Cowork task ask for a real call of `service_status`.
 
 | Outcome | Criterion |

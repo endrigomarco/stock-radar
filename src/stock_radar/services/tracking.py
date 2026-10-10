@@ -20,7 +20,7 @@ from stock_radar.db.models import (
     TriggerEvent,
     TriggerLevel,
 )
-from stock_radar.market_calendar import CalendarUnavailable, in_session, window_close
+from stock_radar.market_calendar import CalendarUnavailable, TradingCalendar, window_close
 from stock_radar.observability.logging import emit
 from stock_radar.services.errors import ServiceError
 from stock_radar.viewmodels.tracking import (
@@ -54,13 +54,13 @@ class MonitoredInstrument:
     currency: str
 
 
-def quote_rejection(quoted_at: datetime, received_at: datetime) -> str | None:
+def quote_rejection(quoted_at: datetime, received_at: datetime, calendar: TradingCalendar) -> str | None:
     if quoted_at > received_at + FUTURE_TOLERANCE:
         return "quote_in_future"
     if received_at - quoted_at > MAX_QUOTE_AGE:
         return "quote_too_old"
     try:
-        if not in_session(quoted_at):
+        if not calendar.in_session(quoted_at):
             return "quote_outside_session"
     except CalendarUnavailable:
         return "calendar_unavailable"
@@ -241,7 +241,7 @@ class TrackingService:
             return
         rules = self.session.scalar(select(ExperimentVersion.rules).where(ExperimentVersion.id == run.experiment_version_id))
         try:
-            expires_at = window_close(quoted_at, int(rules["window_sessions"]))
+            expires_at = window_close(self.session, quoted_at, int(rules["window_sessions"]))
         except CalendarUnavailable as error:
             emit("calendar_coverage_missing", logging.WARNING, tracking_run_id=str(run.id), year=error.year)
             return

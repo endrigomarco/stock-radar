@@ -1,6 +1,6 @@
 # Collection contract
 
-This is the input accepted by the `register_collection` tool, schema version 1, and the receipt it returns.
+This is the input accepted by the `register_collection` tool, schema version 2, and the receipt it returns.
 The tool takes one argument named `request`. Unknown fields are rejected at both levels, so send only the
 fields listed here. The whole request must stay under 1 MiB.
 
@@ -8,16 +8,17 @@ fields listed here. The whole request must stay under 1 MiB.
 
 | Field | Rule |
 |---|---|
-| `schema_version` | `1` |
+| `schema_version` | `2`. Required. Version 1, which sent every row, is rejected. |
 | `client_collection_id` | Random UUID generated once for this collection. Same value on every retry. |
 | `source_id` | UUID of the `tradingview` source, read from `list_sources` or `register_source` in this run. |
 | `source_url` | The exact `http(s)` URL of the page that was read, at most 2000 characters, without embedded credentials. |
 | `observed_at` | Instant the table reading started, with a UTC offset, for example `2026-01-05T20:30:00Z`. |
 | `market_session_date` | `YYYY-MM-DD`. See the time fields below. |
-| `status` | `complete`, `partial` or `failed`. `failed` requires an empty `observations` list. |
+| `status` | `complete`, `partial` or `failed`. Describes how much of the list was examined, not how many rows are sent. `failed` requires an empty `observations` list. |
 | `source_total` | Total number of rows the page itself displays for the list, as an integer. `null` when the page shows no total. Never the number of rows read. |
+| `rows_examined` | Required integer. Number of distinct rows of the list that were examined, qualified or not. Never smaller than the number of observations. With `complete` and a displayed total, it must equal `source_total`. |
 | `filters` | Object of text keys to text values, at most 20 entries, each value at most 2000 characters. |
-| `observations` | List of at most 2000 rows. `(exchange, symbol, signal_kind)` must be unique in the list. |
+| `observations` | Only the qualified rows, at most 2000. May be empty. `(exchange, symbol, signal_kind)` must be unique in the list. |
 
 `filters` describes the view that was read, using displayed text. The backend stores it without
 interpreting it. Keep the keys stable between runs: `list` (for example `biggest_losers_brazil`),
@@ -32,11 +33,11 @@ active, as displayed). Omit a key that could not be observed. Use `{}` when noth
 | `symbol` | Ticker without the exchange prefix, uppercase letters, digits, `.`, `_` or `-`, at most 32 characters. |
 | `currency` | Three uppercase letters. The currency the list quotes prices in, expected `BRL` for this list. |
 | `source_symbol` | The identifier as the source shows it, for example `EXCHANGE:TICKER`, at most 80 characters. |
-| `signal_kind` | `analyst_consensus` for the analyst rating column. `technical_rating` for a technical rating column. |
-| `source_column` | Header of the column the rating was read from, as displayed, at most 120 characters. `null` if no header was readable. |
-| `original_rating` | The rating label exactly as displayed, including language, case and accents. `null` when the cell is empty or shows a placeholder dash. |
+| `signal_kind` | Always `analyst_consensus`. |
+| `source_column` | Header of the analyst rating column, as displayed, at most 120 characters. |
+| `original_rating` | The analyst rating label exactly as displayed, including language, case and accents. |
 | `observed_price` | Decimal text, greater than zero, at most 8 decimal places. `null` when missing or ambiguous. |
-| `daily_change_percent` | Decimal text, signed, not below `-100`, at most 6 decimal places, without the percent sign. `null` when missing or ambiguous. |
+| `daily_change_percent` | Decimal text, negative, not below `-100`, at most 6 decimal places, without the percent sign. |
 | `observed_at` | Instant this row was read, with a UTC offset. The collection `observed_at` is acceptable when rows were read in one pass. |
 | `source_published_at` | Always `null` in this workflow. The table does not show when a rating was issued or changed. |
 | `raw_evidence` | Object of text keys to text or `null`, at most 20 entries, each value at most 2000 characters. |
@@ -48,16 +49,28 @@ spelling between runs. If the prefix cannot be read for a row, skip that row, li
 mark the collection `partial`. An instrument already stored with another currency rejects the whole
 collection with `instrument_currency_conflict`.
 
-Send one `analyst_consensus` observation per row of the table, including rows whose rating cell is empty.
-Add a `technical_rating` observation for the same symbol only when a technical rating column is visible in
-the view being read. Do not change views only to gather technical ratings. Never copy a technical label
-into an `analyst_consensus` observation or the reverse.
+## Which rows are sent
+
+Send one `analyst_consensus` observation for each row that satisfies both conditions, and no other row:
+
+- the analyst rating column, identified by its header, shows `Viés de alta forte` (`Strong Buy` on the
+  English page);
+- the daily change is negative.
+
+Examine the whole list to find them. Rows with any other analyst rating, an empty rating cell, or a zero,
+positive or unreadable daily change are counted in `rows_examined` and are not sent. Technical ratings are
+never sent and never decide selection, even when the technical column shows the same words. Never copy a
+technical label into an `analyst_consensus` observation.
+
+The service applies the same rule to every row it receives. If one row fails it, the whole collection is
+rejected with `observation_not_eligible` and nothing is stored. A missing or ambiguous price does not
+disqualify a row: send `observed_price` as `null` and the row is stored as incomplete.
 
 ## Preserving original values
 
-Labels are evidence. Do not translate, normalize, correct or complete them. The backend maps the analyst
-labels it knows and leaves every other label unknown, which is the intended result. Selection of eligible
-rows also happens in the backend.
+Labels are evidence. Do not translate, normalize, correct or complete them. Send the label of a qualified
+row exactly as displayed; the service recognizes `Viés de alta forte` and `Strong Buy`, ignoring case and
+surrounding spaces.
 
 Numbers are displayed in Brazilian format on this page. Convert only when the reading is unambiguous, and
 keep the displayed text in `raw_evidence` every time:
@@ -101,9 +114,10 @@ unattended run. Never label a previous session's list as today's.
 | `source_id`, `client_collection_id` | Echo of the stored identity. |
 | `status`, `observed_at` | Stored values. |
 | `received_at` | Service receipt time. |
-| `observation_count` | Rows stored for this collection. |
-| `eligible_count` | Rows the backend selected. |
-| `incomplete_count` | Rows stored with a missing price, change, rating or unknown label. |
+| `source_total`, `rows_examined` | Stored values. `rows_examined` is how many rows of the list were examined. |
+| `observation_count` | Rows stored for this collection. Equal to the rows sent. |
+| `eligible_count` | Rows that satisfy the rule. Equal to `observation_count` for every collection of this version. |
+| `incomplete_count` | Rows stored with a missing price. |
 | `duplicate` | `true` when this identifier and identical content were already stored. |
 
 `get_collection` takes `collection_id`, the receipt `id`, and returns the same receipt for a read-back.
@@ -120,6 +134,7 @@ Tool errors arrive as a short code, usually followed by `request_id`. Quote both
 | `source_not_found` | `source_id` is not a registered source. |
 | `source_identity_conflict` | `register_source` was called with a different name for an existing code. |
 | `collection_identity_conflict` | Same `client_collection_id`, different content. |
+| `observation_not_eligible` | A row sent is not a Strong Buy analyst rating with a negative daily change as the service evaluates it. Nothing was stored. |
 | `instrument_currency_conflict` | A row's currency contradicts the stored instrument. Nothing was stored. |
 | `database_unavailable`, `internal_error` | Service failure. The outcome of a write is unknown. |
 

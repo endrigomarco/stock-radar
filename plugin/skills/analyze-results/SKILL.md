@@ -20,7 +20,9 @@ conversation-side calculation as a service metric.
 3. Read with the list tools. Each takes a `query` object with `limit` (1 to 100) and `offset`, and returns
    `has_more`. Pages are not a snapshot across calls. Any count taken from a list is valid only when every
    page was read; otherwise say that the list was truncated and give no total.
-4. Present what is stored: signals with original and normalized rating and eligibility as returned, runs
+4. Only Strong Buy analyst ratings with a negative daily change are stored. Other ratings from the list are
+   not kept, so no comparison with them is possible; say so when asked. Present what is stored: signals with
+   original and normalized rating and eligibility as returned, runs
    with status, reference and levels hit as returned, hits with `evidence_kind` and `evidence_quality`.
    Include identifiers and the time of the query.
 5. State the limits every time they matter. Polled quotes give partial coverage, so no recorded hit is not
