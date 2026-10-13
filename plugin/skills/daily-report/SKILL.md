@@ -52,8 +52,10 @@ measure the tracking runs started by that collection date, not every stock liste
 
 **Per stock.** One row per item:
 
-- `tracking_link` `own`: status, reference price and time, `reference_session_date` as D+0, latest quote
-  with its `quoted_at` and `return_percent` as the accumulated return, then the milestones.
+- `tracking_link` `own`: status, reference price and time, `reference_session_date` as D+0, then the
+  accumulated return, read from the `latest_quote` object: `latest_quote.return_percent`, with
+  `latest_quote.price` and `latest_quote.quoted_at`. When `latest_quote` is null there is no accumulated
+  return to show. Then the milestones.
 - `own` without reference: show `pending_reason` (`waiting_slot`: waiting for a monitoring slot;
   `waiting_quote`: admitted, waiting for a valid quote). No returns.
 - `reused_confirmed`: tracked by an earlier run started on `origin_market_session_date`; not counted again
@@ -61,12 +63,22 @@ measure the tracking runs started by that collection date, not every stock liste
 - `unconfirmed`: no confirmed origin run. Do not guess one.
 
 Milestones are `sessions` 1, 2, 5, 10, 19 and 20. Label 19 as "end of the 20 session window (D+19)" when
-`window_end` is true. Show by `state`:
+`window_end` is true.
+
+A milestone has no value fields of its own. Its price, times and return are inside its nested `quote`
+object: `quote.return_percent`, `quote.price`, `quote.quoted_at` and `quote.received_at`. The same shape is
+used by `latest_quote`. For `final` and `in_progress`, open `quote` before saying that a value is missing;
+a `return_percent` that is not at the top level of the milestone is the normal shape, not a defect.
+`quote.quoted_at` is the market time of the polled quote; `quote.received_at` is when the service received
+it. Show the market time as the time of the quote and never present the receipt time as the quote time.
+Show `quote.return_percent` exactly as returned. Do not recompute it from the price and the reference.
+
+Show by `state`:
 
 | `state` | Show |
 |---|---|
-| `final` | `return_percent`, from the last polled quote of that session |
-| `in_progress` | `return_percent` marked provisional |
+| `final` | `quote.return_percent`, from the last polled quote of that session, timed by `quote.quoted_at`. If `quote` is null, report that the service returned a final milestone without a quote, as an inconsistency, and show no value |
+| `in_progress` | `quote.return_percent` marked provisional. If `quote` is null, write "in progress, no quote available" |
 | `future` | future, with `session_date` |
 | `no_data` | no data, with the `reason` in words |
 | `out_of_window` | outside the current window (D+20) |

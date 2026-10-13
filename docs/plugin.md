@@ -5,7 +5,7 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.7.0, prepared on 2026-10-13 for Claude Cowork on the MacBook Pro.
+Version 0.7.1, prepared on 2026-10-13 for Claude Cowork on the MacBook Pro.
 
 | State | Scope |
 |---|---|
@@ -118,7 +118,7 @@ Steps run by the owner. Record the real results in [testing](testing.md).
    the dedicated environment, the Keychain item created with the prompting form of `security`, and the
    terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
 2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
-   `stock-radar-0.7.0.zip`, then quit and reopen the app.
+   `stock-radar-0.7.1.zip`, then quit and reopen the app.
 3. In a new Cowork task ask for a real call of `service_status`.
 
 | Outcome | Criterion |

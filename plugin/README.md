@@ -2,7 +2,7 @@
 
 Reads the whole daily TradingView list of Brazilian biggest losers in the user's own Chrome in Claude
 Cowork and registers in the Stock Radar service, through MCP tools, only the stocks whose analyst rating
-is `Viés de alta forte` and whose daily change is negative. Other rows are counted and not stored. Version 0.7.0.
+is `Viés de alta forte` and whose daily change is negative. Other rows are counted and not stored. Version 0.7.1.
 
 Status: version 0.2.1 was installed in Cowork by the owner, who saw the four skills and the correct report
 of missing MCP tools. Version 0.5.0 adds a local Python bridge to the owner's Stock Radar service. The
@@ -50,7 +50,7 @@ Once per computer. Nothing is installed at start or per call.
 1. Check for Python 3.10 or later: `python3 --version`. If it is missing or older, install a current
    Python from python.org first. No other tool is required.
 2. Extract the archive to a temporary folder, to reach the bridge files:
-   `unzip -o -q stock-radar-0.7.0.zip -d /tmp/stock-radar-plugin`
+   `unzip -o -q stock-radar-0.7.1.zip -d /tmp/stock-radar-plugin`
 3. Create the dedicated environment and install the pinned, hash-checked dependencies:
    `python3 -m venv "$HOME/Library/Application Support/stock-radar/bridge"`
    `"$HOME/Library/Application Support/stock-radar/bridge/bin/python" -m pip install --require-hashes --only-binary :all: -r /tmp/stock-radar-plugin/mcp/requirements.txt`
