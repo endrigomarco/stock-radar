@@ -37,6 +37,7 @@ def main() -> None:
                 else:
                     cursor.execute(sql.SQL("GRANT {} ON TABLE sources, instruments, collection_runs, signal_observations TO {}").format(sql.SQL(grants), identifier))
                     cursor.execute(sql.SQL("GRANT SELECT ON experiments, experiment_versions, tracking_runs, trigger_levels, trigger_events, price_quotes TO {}").format(identifier))
+            cursor.execute("GRANT SELECT ON trading_days TO stock_radar_reader")
             cursor.execute("GRANT INSERT ON tracking_runs TO stock_radar_collector")
             cursor.execute("GRANT UPDATE (status) ON tracking_runs TO stock_radar_collector")
     print("Reader, collector, webhook and monitor database access configured.")

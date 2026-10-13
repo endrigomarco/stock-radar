@@ -348,3 +348,36 @@ Validated on 2026-10-09 with the complete disposable Docker suite:
 
 Not validated: the migration on any persistent database or on the VPS, real sessions of 2027 and 2028, and
 the official hours outside the configured 10:00 to 17:00. No provider was called.
+
+## Daily report
+
+`tests/check_reports.py` is part of `make test`, after the monitoring check. It inserts a synthetic scenario
+on the October 2026 calendar and evaluates it at fixed instants through the service, then through REST and
+MCP with the reader token.
+
+Validated on 2026-10-13 with the complete disposable Docker suite:
+
+- sample independent of the outcome: two runs with the same missing session, one with a hit and one
+  without, both leave the denominator from that horizon on, and the hit is reported outside the sample;
+- concluded, partial and future: a closed horizon gives 3/5 and 2/3; a horizon whose session has not opened
+  counts its runs as future and has no denominator in either block; a block without runs returns no rate
+  instead of zero;
+- session in progress: a run needs a quote of that session by the generation time. With D+1 in progress two
+  of seven runs are in the sample (2/2); with D+2 in progress and no quote yet, runs with and without an
+  earlier hit are both excluded and four hits appear outside the sample; after the day's quotes arrive the
+  same runs enter the sample (2/3);
+- one collection date with two reference sessions keeps concluded, partial and future counts apart;
+- early completion with all hits timed stays in later horizons and is counted as completed early, with later
+  milestones reported as no data; a completed run with an untimed hit is excluded for coverage and its
+  order is indeterminate; a cancelled run is excluded and its hit is reported outside the sample;
+- two successive runs of one instrument do not share quotes;
+- reuse is confirmed for an open admitted run and for an expired run whose window ended later, and is
+  unconfirmed for a never admitted run, a cancelled run and a run that ended before the observation;
+- milestones: future, in progress, final, no data, not available and out of window, across a weekend, the
+  12 October and 2 November holidays, with D+19 marked as the window end and D+20 outside it;
+- row pagination keeps the totals of the date; date pagination reports older dates;
+- the reader token reads the report over REST and MCP, nothing is written, the reader role reads
+  `trading_days` and cannot change it, and the tool list has 12 tools.
+
+Not validated: the report against production data, the skill in Cowork, the reader grant on the VPS and any
+scheduled run. The scenario is synthetic and its timestamps are set by hand.

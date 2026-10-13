@@ -172,7 +172,8 @@ Each cycle first expires runs whose window ended, even when the market is closed
 Each cycle reads the days around the current date from the `trading_days` table in one query. Outside a
 session, or on a date the table does not cover, it makes no external call and logs `market_closed` in the
 cycle summary for a known closure, or `calendar_unavailable` with a warning of the same name when the date
-has no row. The table covers 2026 to 2028; `make db-access` grants the monitor read access to it. During a session it admits waiting
+has no row. The table covers 2026 to 2028; `make db-access` grants read access to it to the monitor and, for the daily
+report, to the reader role. During a session it admits waiting
 runs up to `MONITOR_MAX_INSTRUMENTS`, then makes one sequential request per monitored instrument with no
 database transaction open, and applies each accepted quote in its own short transaction. A failure for one
 instrument is logged and the others continue. The clock and the session are checked again immediately before

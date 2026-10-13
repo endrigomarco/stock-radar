@@ -17,8 +17,10 @@ from stock_radar.security import access_role
 from stock_radar.services.collections import CollectionService, SignalService
 from stock_radar.services.errors import ServiceError
 from stock_radar.services.sources import SourceService
+from stock_radar.services.reports import ReportService
 from stock_radar.services.status import StatusService
 from stock_radar.services.tracking import TrackingService
+from stock_radar.viewmodels.reports import DailyReport, DailyReportQuery
 from stock_radar.viewmodels.collections import CollectionInput, CollectionOutput, SignalPage, SignalQuery
 from stock_radar.viewmodels.sources import SourceInput, SourceListInput, SourceListOutput, SourceOutput
 from stock_radar.viewmodels.status import QualityOutput, QualityQuery, StatusOutput
@@ -107,6 +109,10 @@ def create_mcp(app) -> MCPServer:
     @server.tool(description="List first observed threshold hits. A missing hit does not prove the price never touched the level between polls.", annotations=read)
     async def list_trigger_events(query: TriggerEventQuery, ctx: Context) -> TriggerEventPage:
         return await invoke(ctx, "list_trigger_events", lambda session: TrackingService(session).list_events(query))
+
+    @server.tool(description="Read the daily report: per collection date, signal progress since the recorded reference and target hit rates by session horizon, with sample exclusions. Polled quotes only; a missing hit is not proof. Paginated by collection date.", annotations=read)
+    async def daily_report(query: DailyReportQuery, ctx: Context) -> DailyReport:
+        return await invoke(ctx, "daily_report", lambda session: ReportService(session).daily(query))
 
     @server.tool(description="Cancel an open tracking run idempotently and free its monitoring slot. Requires collector access.", annotations=write)
     async def cancel_tracking_run(tracking_run_id: UUID, ctx: Context) -> TrackingRunOutput:

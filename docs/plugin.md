@@ -5,11 +5,11 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.6.0, prepared on 2026-10-09 for Claude Cowork on the MacBook Pro.
+Version 0.7.0, prepared on 2026-10-13 for Claude Cowork on the MacBook Pro.
 
 | State | Scope |
 |---|---|
-| Implemented | Manifest with one local MCP server, the Python bridge in `plugin/mcp/`, four skills with their references, `make package` |
+| Implemented | Manifest with one local MCP server, the Python bridge in `plugin/mcp/`, five skills with their references, `make package` |
 | Tested with synthetic data | The bridge over stdio against a synthetic MCP server: discovery, successful calls, tool errors, refused token, closed port, redirect to another origin, clean diagnostics; in Docker and natively on macOS with Python 3.13 |
 | Tested by the owner | Reported on 2026-10-09: version 0.2.1 installed in Cowork with its four skills, and `check-status` reported the MCP tools as absent; from a terminal on the MacBook Pro an authenticated `initialize` to the VPS endpoint over Tailscale returned 200 |
 | Not validated | Cowork starting the bridge, tool discovery and any tool call from Cowork, the Keychain read on the MacBook, Python 3.10 to 3.12, Chrome reading of the real table, scheduling |
@@ -27,6 +27,7 @@ VPS. The MacBook needs Python and the bridge dependencies only; no Docker, Node.
 | collect-signals | Examine the whole list and register only Strong Buy analyst rows with a negative daily change | `service_status`, `list_sources`, `register_source`, `register_collection`, `get_collection` |
 | check-status | Read service, receipts, quality counts and tracking state | `service_status`, `data_quality_report`, `get_collection`, tracking list tools |
 | analyze-results | Describe stored signals, runs and hits | `list_signals`, tracking list tools |
+| daily-report | Present the service's daily report without computing anything | `service_status`, `daily_report` |
 | prepare-triggers | Read tracking runs; cancel one on explicit request | `list_tracking_runs`, `cancel_tracking_run` |
 
 The backend creates or reuses tracking runs when an eligible observation is registered, and the monitor on
@@ -117,7 +118,7 @@ Steps run by the owner. Record the real results in [testing](testing.md).
    the dedicated environment, the Keychain item created with the prompting form of `security`, and the
    terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
 2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
-   `stock-radar-0.6.0.zip`, then quit and reopen the app.
+   `stock-radar-0.7.0.zip`, then quit and reopen the app.
 3. In a new Cowork task ask for a real call of `service_status`.
 
 | Outcome | Criterion |

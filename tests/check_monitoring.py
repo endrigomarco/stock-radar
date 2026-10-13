@@ -161,7 +161,7 @@ def check_calendar(admin, monitor_engine, collector_engine, reader_engine) -> No
         raise AssertionError("A day outside the loaded range was treated as covered")
     with monitor_engine.connect() as connection:
         assert connection.scalar(text("SELECT count(*) FROM trading_days")) == 1096
-    for engine, statement in [(monitor_engine, "DELETE FROM trading_days"), (monitor_engine, "UPDATE trading_days SET is_open = false, opens_at = NULL, closes_at = NULL"), (collector_engine, "SELECT 1 FROM trading_days"), (reader_engine, "SELECT 1 FROM trading_days")]:
+    for engine, statement in [(monitor_engine, "DELETE FROM trading_days"), (monitor_engine, "UPDATE trading_days SET is_open = false, opens_at = NULL, closes_at = NULL"), (collector_engine, "SELECT 1 FROM trading_days"), (reader_engine, "DELETE FROM trading_days")]:
         try:
             with engine.begin() as connection:
                 connection.execute(text(statement))

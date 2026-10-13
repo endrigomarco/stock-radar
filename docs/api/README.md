@@ -16,6 +16,7 @@
 | GET /v1/webhook-receipts/{receipt_id} | Webhook processing status | Read |
 | POST /webhooks/tradingview | Durable webhook receipt | Dedicated webhook credential |
 | GET /v1/data-quality | Bounded collection and observation quality counts | Read |
+| GET /v1/reports/daily | Daily report by collection date: signal progress and target hit rates | Read |
 
 Use `Authorization: Bearer <API_READER_TOKEN>` for reads and the distinct `API_COLLECTOR_TOKEN`
 for writes or reads. Missing/invalid credentials return 401; reader writes return 403.
@@ -164,3 +165,61 @@ a session or in data the provider published late. Do not report silence as a ver
 Every HTTP response carries `X-Request-ID`. Captured server errors also carry `X-Error-ID` while retaining
 safe error bodies. Unexpected failures return 500 with `internal_error`; database failures remain 503.
 Use these identifiers with `make errors ID=...`. See [observability](../observability.md).
+
+## Daily report
+
+`GET /v1/reports/daily` and the MCP tool `daily_report` call the same read-only service. The report always
+describes the current state: it runs in one repeatable-read transaction, returns `generated_at` and uses
+only quotes and events recorded up to that instant. There is no historical `as_of`. Pages requested at
+different moments are not one snapshot.
+
+Query: `limit` collection dates (default 10, at most 30) and `offset`, newest first; optional
+`market_session_date` to read one date; `signal_limit` (at most 100) and `signal_offset` to page the rows of
+one date, which requires `market_session_date`. Top level `has_more` reports older dates. Each date carries
+`signals_has_more`. Totals and rates of a date always cover the whole date.
+
+Rules, all computed by the service:
+
+- Groups are collection dates (`market_session_date`). Only eligible observations are counted as signals.
+- A signal is `own` when a tracking run was created from that observation. It is `reused_confirmed` only
+  when exactly one other run of the instrument was admitted before the observation was stored and is
+  provably still open after it: open now, expired with a later `expires_at`, or completed with its last
+  event recorded later; and no other run of the instrument was created in between. Anything else, including
+  a cancelled or never admitted run, is `unconfirmed`. Rates use `own` runs only, so they describe the runs
+  started by that date, not every stock listed that day.
+- D+0 is the session of `reference_at`; D+N is the Nth following session of `trading_days`. The 20 session
+  window ends at D+19. D+20 is reported as `out_of_window`.
+- A run uses only quotes of its instrument and reference source, timed from `reference_at` to the earliest
+  of `generated_at`, `expires_at` and, for a completed run, the time of its last recorded hit. A completed
+  run whose hits are not all timed quote evidence, and a cancelled run, use no quotes, because their end
+  cannot be dated. Quotes of a later run of the same instrument are never used for an earlier one.
+- Milestones 1, 2, 5, 10, 19 and 20 have a state: `future`, `in_progress` (provisional, last quote so far),
+  `final` (last accepted quote of that session), `no_data`, `out_of_window`, `not_available` (cancelled) or
+  `calendar_unavailable`. A past milestone is never filled with a later quote. Returns are
+  `(price / reference - 1) * 100`, two decimals, and are polled quotes, never closing, highest or lowest
+  prices.
+- Rate sample for a horizon, independent of the outcome: the run is `own`, has a reference, is not
+  cancelled and has at least one accepted quote in every session from D+0 to D+N, including the D+N session
+  itself while it is in progress, where the quote must exist by `generated_at`. A run with earlier hits but
+  no quote yet in the session in progress is excluded for coverage, and its hits are reported outside the
+  sample. This is a minimum sampling criterion, not complete coverage: it sets no number, frequency or age
+  of quotes. A run completed with all six
+  hits timed needs that coverage only up to its completion session and stays in later horizons, counted in
+  `completed_early`; this applies to targets only, never to returns.
+- A target is a hit when its event has `occurred_at` up to the horizon close, or up to `generated_at` while
+  the horizon is open. An event without `occurred_at` makes that target `indeterminate` for the run and
+  removes it from that target's denominator. No event means not observed, not proof of no touch.
+- Each run is placed in a horizon by its own D+N session, so one collection date can hold runs in different
+  positions. Before that session opens the run is counted in `future_runs` and is in no denominator. While
+  the session is in progress it is in the `partial` block. After the close it is in the `concluded` block.
+  The partial denominator holds every run in the sample at that moment, not only those that already hit. A
+  run completed early enters a horizon only when that horizon's session arrives.
+- Every target reports `hits`, `denominator`, `rate_percent` (one decimal, null when the denominator is
+  zero), `indeterminate` and `proven_hits_outside_sample`, the timed hits of runs excluded as cancelled or
+  for coverage. Blocks report the exclusion counts.
+- `target_order` compares the +2% and -2% events of a run: `up_first`, `down_first`, `only_up`, `only_down`,
+  `neither`, `indeterminate` (missing time, unknown evidence quality or equal times) or `not_assessed`
+  (cancelled). It is the order of observations; the real order between polls is unknown.
+
+Not available: D+20, quotes after completion, expiry or cancellation, the time of a cancellation, a report
+as of a past instant, and a link between a signal and a run that was cancelled or never admitted.

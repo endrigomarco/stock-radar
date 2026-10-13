@@ -2,7 +2,7 @@
 
 Reads the whole daily TradingView list of Brazilian biggest losers in the user's own Chrome in Claude
 Cowork and registers in the Stock Radar service, through MCP tools, only the stocks whose analyst rating
-is `Viés de alta forte` and whose daily change is negative. Other rows are counted and not stored. Version 0.6.0.
+is `Viés de alta forte` and whose daily change is negative. Other rows are counted and not stored. Version 0.7.0.
 
 Status: version 0.2.1 was installed in Cowork by the owner, who saw the four skills and the correct report
 of missing MCP tools. Version 0.5.0 adds a local Python bridge to the owner's Stock Radar service. The
@@ -16,6 +16,7 @@ not validated yet. See `docs/plugin.md` in the repository.
 | `collect-signals` | Examines the whole losers table in Chrome, keeps the Strong Buy analyst rows with a negative daily change, builds one collection payload and calls `register_collection`. Confirms the result from the receipt. |
 | `check-status` | Read-only view of service availability, collection receipts, quality counts and tracking state. |
 | `analyze-results` | Read-only description of stored signals, runs and recorded hits. No computed performance metrics exist yet. |
+| `daily-report` | Read-only end of day report computed by the service: per stock, the recorded reference, latest polled quote and returns by session milestone; per collection date, target hit rates by horizon with their exclusions. |
 | `prepare-triggers` | View of tracking runs, plus cancellation of one run on explicit request. Tracking is prepared by the backend; this skill prepares nothing. |
 
 Ask for the task in plain language, or type `/stock-radar:` and choose the skill.
@@ -49,7 +50,7 @@ Once per computer. Nothing is installed at start or per call.
 1. Check for Python 3.10 or later: `python3 --version`. If it is missing or older, install a current
    Python from python.org first. No other tool is required.
 2. Extract the archive to a temporary folder, to reach the bridge files:
-   `unzip -o -q stock-radar-0.6.0.zip -d /tmp/stock-radar-plugin`
+   `unzip -o -q stock-radar-0.7.0.zip -d /tmp/stock-radar-plugin`
 3. Create the dedicated environment and install the pinned, hash-checked dependencies:
    `python3 -m venv "$HOME/Library/Application Support/stock-radar/bridge"`
    `"$HOME/Library/Application Support/stock-radar/bridge/bin/python" -m pip install --require-hashes --only-binary :all: -r /tmp/stock-radar-plugin/mcp/requirements.txt`
@@ -66,7 +67,7 @@ Restart the Claude desktop app after changing the Keychain item. To remove the s
 1. Take the ready archive `stock-radar-<version>.zip`. It is built on a development machine with
    `make package`; the computer that installs it needs no development tools.
 2. In the Claude desktop app open Customize, Plugins, Add, Upload plugin and select the archive.
-3. Open the installed plugin and confirm the four skills are listed.
+3. Open the installed plugin and confirm the five skills are listed.
 
 Installing is not a working connection and creates no credential or schedule. A connection is proven only
 by a real tool call, such as `service_status`, shown in a Cowork task. Until the tools are available, every

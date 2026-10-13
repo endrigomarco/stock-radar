@@ -16,6 +16,7 @@ The server version is `0.1.0`. This is a local implementation, not an installed 
 | list_tracking_runs | Read | `query`: status/instrument filter object |
 | list_latest_quotes | Read | `query`: instrument filter object |
 | list_trigger_events | Read | `query`: tracking run/instrument filter object |
+| daily_report | Read | `query`: collection date page and signal page object, use `{}` for the ten most recent dates |
 | cancel_tracking_run | Collector | `tracking_run_id`: UUID |
 
 Input/output schemas and semantics match [REST contracts](README.md). Tools call the same services,

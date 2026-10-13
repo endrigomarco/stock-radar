@@ -7,7 +7,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import create_engine
 from sqlalchemy.exc import SQLAlchemyError
 
-from stock_radar.controllers import collections, health, metrics, sources, status, tracking, webhooks
+from stock_radar.controllers import collections, health, metrics, reports, sources, status, tracking, webhooks
 from stock_radar.mcp import create_mcp
 from stock_radar.middleware import RequestBoundary
 from stock_radar.services.errors import ServiceError
@@ -63,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(collections.router)
     app.include_router(status.router)
     app.include_router(tracking.router)
+    app.include_router(reports.router)
     app.include_router(webhooks.router)
     mcp = create_mcp(app)
     transport_security = TransportSecuritySettings(
