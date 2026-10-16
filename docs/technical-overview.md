@@ -2,12 +2,15 @@
 
 ## Implemented scope
 
-The Docker backend includes REST and MCP interfaces, Pydantic ViewModels, SQLAlchemy entities, twelve
+The Docker backend includes REST and MCP interfaces, Pydantic ViewModels, SQLAlchemy entities, fourteen
 normalized tables and Alembic migrations. Shared services register sources, persist collections atomically,
 normalize ratings, list signals and report status/data quality. Reader and collector tokens map to separate
 restricted database roles. Webhook receipt and processing of existing mappings are implemented with a restricted third database role.
-Collection registration creates or reuses tracking runs, and a separate monitoring process polls quotes,
-activates runs and records threshold hits through the same tracking service. Financial metrics and live
+Collection registration stores candidates; under the assisted policy tracking runs are created only by a
+confirmed selection (at most three new per session), while sessions under the earlier policy create or reuse
+runs at registration. A separate monitoring process polls quotes, activates runs and records threshold hits
+through the same tracking service. `services/policy.py` resolves the policy of a session and
+`services/selection.py` registers candidates, lists them and confirms selections. Financial metrics and live
 integrations remain pending. See [quote monitoring](operations.md#quote-monitoring).
 
 ## Backend layers
@@ -74,8 +77,9 @@ protected readiness, independently of process liveness.
 The API receives reader/collector tokens and restricted database passwords, without administrator credentials.
 The reader has SELECT and the collector SELECT/INSERT on sources, instruments, collection_runs and
 signal_observations. Both read experiments, tracking runs, levels, events and price quotes. The collector also
-inserts prepared tracking runs and updates only their status, which is what cancellation needs. Neither role can
-delete records or read webhook receipts. The monitor process uses its own restricted role. Local HTTP is published on loopback only, with no trusted proxy
+inserts prepared tracking runs and updates only their status, which is what cancellation needs. For assisted
+selection both read the trading calendar and the selection tables, and the collector inserts selections and
+decisions and updates only decision columns. Neither role can delete records or read webhook receipts. The monitor process uses its own restricted role. Local HTTP is published on loopback only, with no trusted proxy
 headers, wildcard CORS or public interactive documentation. HTTPS and public-ingress controls remain
 requirements before an authorized VPS deployment. See [security](security-basic.md).
 

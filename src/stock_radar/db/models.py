@@ -87,6 +87,7 @@ class CollectionRun(IdentityMixin, Base):
     source_total: Mapped[int | None] = mapped_column(Integer)
     rows_examined: Mapped[int | None] = mapped_column(Integer)
     filters: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    experiment_version_id: Mapped[UUID | None] = mapped_column(ForeignKey("experiment_versions.id", ondelete="RESTRICT"), index=True)
 
 
 class SignalObservation(IdentityMixin, Base):
@@ -97,6 +98,7 @@ class SignalObservation(IdentityMixin, Base):
         CheckConstraint("daily_change_percent IS NULL OR daily_change_percent >= -100", name="change_valid"),
         CheckConstraint("parse_status IN ('valid', 'partial', 'invalid')", name="parse_status_valid"),
         CheckConstraint("length(trim(signal_kind)) > 0", name="signal_kind_not_blank"),
+        CheckConstraint("volume IS NULL OR volume >= 0", name="volume_nonnegative"),
     )
 
     collection_run_id: Mapped[UUID] = mapped_column(ForeignKey("collection_runs.id", ondelete="RESTRICT"))
@@ -114,6 +116,8 @@ class SignalObservation(IdentityMixin, Base):
     parse_status: Mapped[str] = mapped_column(String(16))
     raw_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
     quality_details: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    volume: Mapped[Decimal | None] = mapped_column(Numeric(24, 0))
+    sector: Mapped[str | None] = mapped_column(String(120))
 
 
 class Experiment(IdentityMixin, Base):
@@ -168,6 +172,58 @@ class TrackingRun(IdentityMixin, Base):
     status: Mapped[str] = mapped_column(String(16), server_default="prepared")
     price_coverage: Mapped[str] = mapped_column(String(16), server_default="unknown")
     coverage_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+
+
+class CandidateSelection(IdentityMixin, Base):
+    __tablename__ = "candidate_selections"
+    __table_args__ = (
+        CheckConstraint("payload_hash ~ '^[0-9a-f]{64}$'", name="payload_hash_sha256"),
+        CheckConstraint("length(trim(criteria_version)) > 0", name="criteria_version_not_blank"),
+        CheckConstraint("ranking_basis IN ('full', 'limited')", name="ranking_basis_valid"),
+        Index("ix_candidate_selections_version_session", "experiment_version_id", "market_session_date"),
+    )
+
+    client_selection_id: Mapped[UUID] = mapped_column(Uuid, unique=True)
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    experiment_version_id: Mapped[UUID] = mapped_column(ForeignKey("experiment_versions.id", ondelete="RESTRICT"))
+    market_session_date: Mapped[date] = mapped_column(Date)
+    criteria_version: Mapped[str] = mapped_column(String(64))
+    ranking_basis: Mapped[str] = mapped_column(String(16))
+    summary: Mapped[str] = mapped_column(Text)
+    no_selection_reason: Mapped[str | None] = mapped_column(Text)
+    plugin_version: Mapped[str | None] = mapped_column(String(32))
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    late: Mapped[bool] = mapped_column(Boolean)
+
+
+class CandidateDecision(IdentityMixin, Base):
+    __tablename__ = "candidate_decisions"
+    __table_args__ = (
+        UniqueConstraint("experiment_version_id", "market_session_date", "instrument_id", name="uq_candidate_decisions_candidate"),
+        UniqueConstraint("experiment_version_id", "market_session_date", "slot", name="uq_candidate_decisions_slot"),
+        CheckConstraint("outcome IN ('pending', 'selected', 'not_selected', 'not_assessable', 'already_tracked')", name="outcome_valid"),
+        CheckConstraint("(outcome = 'selected') = (slot IS NOT NULL)", name="slot_matches_selection"),
+        CheckConstraint("slot IS NULL OR slot > 0", name="slot_positive"),
+        CheckConstraint("rank IS NULL OR rank > 0", name="rank_positive"),
+        CheckConstraint("outcome NOT IN ('selected', 'already_tracked') OR tracking_run_id IS NOT NULL", name="run_required"),
+        CheckConstraint("(outcome = 'pending') = (decided_at IS NULL)", name="decided_matches_outcome"),
+        CheckConstraint("jsonb_typeof(details) = 'object'", name="details_object"),
+    )
+
+    experiment_version_id: Mapped[UUID] = mapped_column(ForeignKey("experiment_versions.id", ondelete="RESTRICT"))
+    market_session_date: Mapped[date] = mapped_column(Date)
+    instrument_id: Mapped[UUID] = mapped_column(ForeignKey("instruments.id", ondelete="RESTRICT"), index=True)
+    signal_observation_id: Mapped[UUID] = mapped_column(ForeignKey("signal_observations.id", ondelete="RESTRICT"), index=True)
+    candidate_selection_id: Mapped[UUID | None] = mapped_column(ForeignKey("candidate_selections.id", ondelete="RESTRICT"), index=True)
+    outcome: Mapped[str] = mapped_column(String(24))
+    reason_code: Mapped[str | None] = mapped_column(String(48))
+    rank: Mapped[int | None] = mapped_column(Integer)
+    baseline_rank: Mapped[int | None] = mapped_column(Integer)
+    slot: Mapped[int | None] = mapped_column(Integer)
+    tracking_run_id: Mapped[UUID | None] = mapped_column(ForeignKey("tracking_runs.id", ondelete="RESTRICT"), index=True)
+    rationale: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class TriggerLevel(IdentityMixin, Base):

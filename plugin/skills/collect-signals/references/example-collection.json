@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "client_collection_id": "00000000-0000-4000-8000-000000000001",
   "source_id": "00000000-0000-4000-8000-000000000002",
   "source_url": "https://example.invalid/synthetic-losers",
@@ -28,8 +28,12 @@
       "raw_evidence": {
         "price_text": "12,34 BRL",
         "change_text": "−2,50%",
-        "rating_text": "Viés de alta forte"
-      }
+        "rating_text": "Viés de alta forte",
+        "volume_text": "1,2 mi",
+        "sector_text": "Synthetic sector"
+      },
+      "volume": "1200000",
+      "sector": "Synthetic sector"
     }
   ]
 }

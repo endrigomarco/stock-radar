@@ -13,8 +13,9 @@ These rules are implemented for experiment `tradingview_losers_strong_buy`, vers
 proposal of separate daily tracking runs.
 
 - One open tracking run per instrument and experiment, across versions. A new eligible observation is stored
-  and reuses the `prepared` or `active` run; it never resets reference, window or levels. A run is created only
-  together with its origin observation, so a consumed observation cannot create another run.
+  and reuses the `prepared` or `active` run; it never resets reference, window or levels. Under version 1 a run
+  is created only together with its origin observation; under version 2 it is created by a confirmed
+  selection (see below). Either way an observation that already originated a run cannot create another.
 - At most `MONITOR_MAX_INSTRUMENTS` distinct instruments (default 30) are monitored. Other runs wait and are
   admitted oldest first when a slot frees. Runs created by the same collection share a creation time and are
   ordered arbitrarily among themselves.
@@ -44,6 +45,45 @@ Polling stops strictly at the session close. No extra collection runs after the 
 reconciliation, so the last minutes of every session, the closing call and anything the provider publishes
 late, including on the final session of a window, can be missed. Every polled run has `price_coverage` set to
 `partial`. No detected hit is not proof that the price never touched a level between polls.
+
+## Assisted selection, version 2
+
+Version 2 of `tradingview_losers_strong_buy` keeps every rule above and adds `candidate_selection`, criteria
+`selection-v1`. It governs a session when the session's first collection was registered under it; sessions
+whose first collection came earlier stay under version 1 entirely, including the day of the transition, so a
+session never gets two policies or extra slots. Version 1 history is not reclassified.
+
+- Initial filter unchanged: negative daily change and analyst consensus Strong Buy. Every eligible row is
+  stored as a candidate of its session, including those never selected.
+- At most three new tracking runs per session, counted over every collection and confirmation of that
+  session. The session is the B3 day the list describes, derived by the service from the observation time
+  and `trading_days` in America/Sao_Paulo. A stock with an open run reuses it and uses no slot.
+- The assistant researches and ranks; the service validates limits, identity, states and justifications and
+  creates the runs. With enough candidates and basic data the normal result fills the remaining slots. A
+  candidate is excluded only for a concrete impediment with a dated source: an official trading halt, or a
+  proven reverse split, split or share bonus whose ex-date is likely inside the 20 sessions after the
+  decision (`price_comparison_invalid`). The real window starts at the reference, which can wait for a
+  monitoring slot, so this is assessed with the information available at decision time and recorded as such.
+  Tender offers, judicial recovery, negative news, upcoming results and ex-dividend drops are risks that
+  lower a candidate in the order, never exclusions by themselves.
+- Missing complementary information is neutral and never excludes. The baseline order uses the turnover
+  estimate at the observed price only when it is comparable for every pending candidate; otherwise a stable
+  hash of session date and symbol, with no financial meaning. There is no score and no minimum confidence;
+  nothing is presented as a probability of gain.
+- Decisions are final for the session. Cancelling a selected run does not free its slot. A later collection
+  of the session can fill only the slots still free. An analysis interrupted before sending its confirmation
+  decides nothing. When the confirmation was sent but no receipt arrived, the outcome is unknown: the same
+  request is retried with the same identifier, or the session is read before any new decision.
+- Reference: the rules above, plus the quote's market time must not be earlier than the decision instant,
+  the server time read after the confirmation was validated. Market information after that instant cannot
+  enter the reference.
+- Late selections are accepted: a confirmation at or after the opening of the following session is stored
+  with `late` true. It cannot be presented as a choice made on the collection date; reports show the
+  collection date, the selection time and the reference separately and keep late and on-time rates apart.
+
+Candidates not selected are not tracked. Storing them makes the choice auditable but measures nothing about
+their later prices, so no comparison between selected and discarded candidates is possible. Do not adjust
+the criteria after seeing results; a change of criteria needs a new version.
 
 ## Earlier proposals for manual alerts
 

@@ -5,7 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-TrackingLink = Literal["own", "reused_confirmed", "unconfirmed"]
+TrackingLink = Literal["own", "reused_confirmed", "unconfirmed", "already_tracked", "selection_pending", "not_selected", "not_assessable"]
+SelectionOutcome = Literal["pending", "selected", "not_selected", "not_assessable", "already_tracked"]
 MilestoneState = Literal["future", "in_progress", "final", "no_data", "out_of_window", "not_available", "calendar_unavailable"]
 TargetOrder = Literal["up_first", "down_first", "only_up", "only_down", "neither", "indeterminate", "not_assessed"]
 
@@ -61,6 +62,11 @@ class SignalProgress(BaseModel):
     latest_quote: QuoteReading | None
     milestones: list[MilestoneOutput]
     target_order: TargetOrder | None
+    selection_outcome: SelectionOutcome | None = None
+    selection_reason: str | None = None
+    selection_rank: int | None = None
+    selected_at: datetime | None = None
+    selection_late: bool | None = None
 
 
 class TargetRate(BaseModel):
@@ -91,8 +97,36 @@ class HorizonOutput(BaseModel):
     partial: RateBlock | None
 
 
+class SelectionRecord(BaseModel):
+    id: UUID
+    decided_at: datetime
+    late: bool
+    ranking_basis: str
+    no_selection_reason: str | None
+
+
+class SelectionSummary(BaseModel):
+    experiment_version: int
+    criteria_version: str
+    max_new_per_session: int
+    collection_statuses: dict[str, int]
+    eligible_observations: int
+    candidates: int
+    new_candidates: int
+    already_tracked: int
+    selected: int
+    selected_on_time: int
+    selected_late: int
+    not_selected: dict[str, int]
+    not_assessable: int
+    pending: int
+    selections: list[SelectionRecord]
+
+
 class CollectionGroup(BaseModel):
     market_session_date: date
+    selection_policy: Literal["automatic", "assisted"]
+    experiment_version: int | None
     collection_ids: list[UUID]
     signals: int
     own_runs: int
@@ -107,6 +141,9 @@ class CollectionGroup(BaseModel):
     cancelled: int
     horizons: list[HorizonOutput]
     target_order: dict[str, int]
+    late_horizons: list[HorizonOutput]
+    late_target_order: dict[str, int]
+    selection: SelectionSummary | None
     items: list[SignalProgress]
     signal_limit: int
     signal_offset: int

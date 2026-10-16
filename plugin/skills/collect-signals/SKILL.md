@@ -1,6 +1,6 @@
 ---
 name: collect-signals
-description: Read the whole daily TradingView list of Brazilian biggest losers in the user's Chrome and register in Stock Radar, with the register_collection MCP tool, only the stocks whose analyst rating is "Viés de alta forte" and whose daily change is negative. Use for the scheduled daily scan or when the user asks to "collect signals", "run the Stock Radar scan", "coletar sinais" or "rodar a coleta". Not for trading, alerts, tracking setup or analysis.
+description: Read the whole daily TradingView list of Brazilian biggest losers in the user's Chrome and register in Stock Radar, with the register_collection MCP tool, only the stocks whose analyst rating is "Viés de alta forte" and whose daily change is negative. Registered stocks become candidates; up to three new ones per session start tracking only after the select-candidates skill confirms them. Use for the scheduled daily scan or when the user asks to "collect signals", "run the Stock Radar scan", "coletar sinais" or "rodar a coleta". Not for trading, alerts, tracking setup or analysis.
 ---
 
 # Collect Signals
@@ -17,9 +17,11 @@ Answer in the user's language. Never use em dashes. Report only what was actuall
 - The only writes are `register_collection` and, when the source is missing, `register_source`.
   No SQL, no direct HTTP to the service, no local files standing in for the service.
 - This skill selects the qualified rows by the rule above and nothing else. The backend applies the same
-  rule again and rejects the whole collection if any row fails it. The backend also creates or reuses
-  tracking runs and, on the server, sets reference prices and records hits. Do not compute levels, supply
-  reference prices, start tracking or create alerts. Do not call `cancel_tracking_run` from this skill.
+  rule again and rejects the whole collection if any row fails it. Every stored row becomes a candidate of
+  its session. Under the assisted policy no tracking starts at registration: the `select-candidates` skill
+  later confirms at most three new candidates per session. Sessions that began under the earlier automatic
+  policy still start or reuse tracking at registration. Do not compute levels, supply reference prices,
+  start tracking or create alerts. Do not call `cancel_tracking_run` or `confirm_selection` from this skill.
 - In the browser, only navigate, scroll and use visible list controls needed to read the table. Do not
   type credentials, solve captchas, bypass access controls, change account settings, save layouts,
   create alerts, export files or open unrelated pages.
@@ -108,7 +110,8 @@ A row is qualified only when both hold:
 - its daily change is negative, read unambiguously from the displayed value.
 
 For each qualified row capture the symbol identifier, price, daily change and analyst rating exactly as
-displayed. Do not capture or send rows with any other analyst rating, an empty rating cell, or a zero,
+displayed. When the table also shows a volume column and a sector column, capture them as displayed too;
+they are optional and their absence never disqualifies a row. Do not capture or send rows with any other analyst rating, an empty rating cell, or a zero,
 positive or unreadable daily change. A row with the right rating whose daily change cannot be read
 reliably is not sent; list it in the report and treat the read as `partial`.
 
@@ -148,7 +151,10 @@ Confirm from the returned receipt, not from the absence of an error:
 - `status` equals the one sent;
 - `observation_count` equals the number of observations sent, and `eligible_count` equals it too;
 - `rows_examined` equals the one sent;
-- note `id`, `received_at`, `incomplete_count` and `duplicate`.
+- note `id`, `received_at`, `incomplete_count` and `duplicate`;
+- note `selection_policy`, `candidates_pending`, `candidates_already_tracked`, `candidates_not_monitorable`,
+  `candidates_cap_reached` and `selection_slots_remaining`. These counts describe the current state of the
+  candidates of this collection, not tracking started by this skill.
 
 If the counts or identifiers do not match, say so and do not describe the collection as saved as intended.
 
@@ -165,6 +171,10 @@ If the counts or identifiers do not match, say so and do not describe the collec
   labels that were sent. Do not retry with altered labels or values.
 - `instrument_currency_conflict`, `source_not_found` or a validation error: nothing was stored. Report the
   code and the fields named by the error. Do not drop or alter rows silently to force acceptance.
+- `market_session_date_mismatch`: under the assisted policy the service derives the session from
+  `observed_at` and the trading calendar, and the date sent differs. Nothing was stored. Report both dates
+  and stop; do not change the date to force acceptance. `market_calendar_unavailable` and
+  `collection_observed_in_future`: nothing was stored; report the code.
 - Never read the table again and submit the new reading under an identifier already used. A new reading is a
   new collection with a new identifier, and the earlier attempt must be reported as unresolved.
 - If the kept payload is no longer available, do not reconstruct it. Report the earlier outcome as unknown.
@@ -182,5 +192,11 @@ Tell the user, briefly:
 - anything pending for the user, such as a missing connector or login.
 
 Rows not sent are not stored anywhere. An observed rating is not a newly issued recommendation, and no
-publication date is known. Tracking runs for eligible rows are created or reused by the backend; do not
-describe them as started by this skill, and do not predict prices or returns.
+publication date is known. Do not predict prices or returns.
+
+With `selection_policy` `assisted`, say that the stocks were stored as candidates and that none started
+tracking yet. When `candidates_pending` is above 0 and the user did not ask to stop after collecting,
+continue in this conversation with the `select-candidates` skill for the same `market_session_date`. If it
+cannot run, say that the candidates stay pending and are not discarded. With `selection_policy`
+`automatic`, the session began before the assisted policy and the backend started or reused tracking for
+every stored row; do not describe that as started by this skill.

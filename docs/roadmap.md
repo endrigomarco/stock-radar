@@ -46,10 +46,21 @@ provider and disposable PostgreSQL only. The trading calendar is a PostgreSQL ta
 Pending: a first authorized live cycle from the container, official B3 calendars for 2027 and 2028 in place of
 the national holiday basis, confirmation of B3 hours after the next change, and deployment. External webhooks are deferred.
 
+## 3b. Assisted candidate selection (implemented locally, synthetic validation only)
+
+Every eligible observation is stored as a candidate; Claude researches and ranks them and confirms at most
+three new tracking runs per session through `confirm_selection`, with justifications, risks and unavailable
+information recorded per candidate. The service enforces the limit under concurrency and retries, reuses
+open runs, never takes a reference quoted before the decision and keeps late selections apart in reports.
+Experiment version 2 is seeded by revision `e7c4b2a9d1f6` and governs only sessions whose first collection
+is registered under it. Pending: applying the revision to a persistent database, installing plugin 0.8.0,
+the first interactive run, and the observation of the real table columns. Monitoring discarded candidates,
+historical price sources and a liquidity floor by position size are out of scope.
+
 ## 4. MCP and plugin connection
 
 The local read tools and authorized ingestion path exist. The plugin package for collection is prepared
-(version 0.7.1) with a bundled Python bridge from stdio to the service's MCP endpoint over the private
+(version 0.8.0) with a bundled Python bridge from stdio to the service's MCP endpoint over the private
 network. Installation and skill discovery in Cowork were confirmed by the owner for 0.2.1. The backend and
 PostgreSQL belong on the VPS. The bridge passed synthetic checks; whether Cowork starts it is not yet
 validated; see [plugin](plugin.md). Connect the plugin to an authorized test service.

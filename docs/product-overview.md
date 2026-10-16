@@ -10,8 +10,12 @@ behind its results. It does not execute trades or promise returns.
 
 1. Read the Brazilian biggest-losers universe and preserve the observed list, including other ratings
    when available for comparison. Record whether the traversal was complete.
-2. Select negative daily changes with analyst consensus Strong Buy.
-3. Reuse or create one open tracking run per instrument and experiment; lock its reference at the first valid polled quote.
+2. Select negative daily changes with analyst consensus Strong Buy and store every such stock as a
+   candidate of its session.
+3. Claude researches the candidates and confirms at most three new ones per session, with justifications;
+   the service enforces the limit, reuses an open run when one exists and creates runs only for the selected
+   stocks. Lock each reference at the first valid polled quote after the decision. Sessions collected before
+   this policy started tracking for every eligible stock.
 4. Record the first observed hit of six directional thresholds from polled quotes and retain the evidence.
 5. Ask Claude for results, sample sizes, unresolved cases and data-quality limitations through MCP.
 

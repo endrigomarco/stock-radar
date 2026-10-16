@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 ShortText = Annotated[str, Field(max_length=2000)]
+SCHEMA_3_FIELDS = {"volume", "sector"}
 
 
 class ObservationInput(BaseModel):
@@ -23,6 +24,8 @@ class ObservationInput(BaseModel):
     observed_at: AwareDatetime
     source_published_at: AwareDatetime | None = None
     raw_evidence: dict[str, ShortText | None] = Field(default_factory=dict, max_length=20)
+    volume: Decimal | None = Field(default=None, ge=0, max_digits=24, decimal_places=0, allow_inf_nan=False)
+    sector: str | None = Field(default=None, min_length=1, max_length=120)
 
     @field_validator("observed_at", "source_published_at")
     @classmethod
@@ -33,7 +36,7 @@ class ObservationInput(BaseModel):
 class CollectionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[2]
+    schema_version: Literal[2, 3]
     client_collection_id: UUID
     source_id: UUID
     source_url: HttpUrl = Field(max_length=2000)
@@ -68,7 +71,14 @@ class CollectionInput(BaseModel):
             raise ValueError("Observations cannot exceed the rows examined")
         if self.status == "complete" and self.source_total is not None and self.rows_examined != self.source_total:
             raise ValueError("A complete collection must examine every row of the displayed total")
+        if self.schema_version == 2 and any(row.volume is not None or row.sector is not None for row in self.observations):
+            raise ValueError("Volume and sector require schema version 3")
         return self
+
+    def canonical(self) -> dict:
+        if self.schema_version == 2:
+            return self.model_dump(mode="json", exclude={"observations": {"__all__": SCHEMA_3_FIELDS}})
+        return self.model_dump(mode="json")
 
 
 class CollectionOutput(BaseModel):
@@ -83,6 +93,13 @@ class CollectionOutput(BaseModel):
     observation_count: int
     eligible_count: int
     incomplete_count: int
+    selection_policy: Literal["automatic", "assisted"]
+    experiment_version: int | None
+    candidates_pending: int
+    candidates_already_tracked: int
+    candidates_not_monitorable: int
+    candidates_cap_reached: int
+    selection_slots_remaining: int | None
     duplicate: bool = False
 
 

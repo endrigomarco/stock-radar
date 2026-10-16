@@ -381,3 +381,64 @@ Validated on 2026-10-13 with the complete disposable Docker suite:
 
 Not validated: the report against production data, the skill in Cowork, the reader grant on the VPS and any
 scheduled run. The scenario is synthetic and its timestamps are set by hand.
+
+## Assisted candidate selection
+
+`tests/check_selection.py` is part of `make test`, after the collection rule check and before the monitoring
+check, because it needs the seeded version 2 to govern its sessions. It uses synthetic September 2026
+sessions, REST, MCP and the services directly, and cancels the runs it opened at the end so later checks
+keep their own monitoring state. `tests/synthetic_session.py` picks the most recent open session before
+today so that collections in the existing checks pass the session date validation at any time of day.
+
+Validated on 2026-10-15 with the complete disposable Docker suite, the database at the head revision with
+version 2 seeded:
+
+- registration under the assisted policy stores candidates as `pending` and creates no run; the existing
+  workflow and collection rule checks now expect that;
+- eight candidates with price, volume and sector: baseline by estimated turnover, three selected with slots
+  1 to 3, five `outranked`, runs created only for the three, with `created_at` equal to `decided_at`;
+  identical retry returns `duplicate` and changed content under the same identifier returns 409;
+- eight candidates without volume or sector, one without price: baseline by the stable tiebreak, zero or
+  two selected with others only `outranked` rejected as underfilled, three selected with basis `limited`
+  accepted;
+- two apt candidates and two with impediments: accepted with two selected; impediments without a dated
+  source or without `event_date` rejected; evidence consulted after the decision rejected;
+- zero selected with two documented halts accepted only with `no_selection_reason`; a complete collection
+  without candidates lists an empty session with nothing to confirm;
+- stocks with open runs are `already_tracked` at registration and use no slot; an invalid ticker format is
+  `not_monitorable`; no duplicate run is created;
+- second and third collections of a session: only new instruments become pending, remaining slots are
+  enforced, an incomplete or outdated request is rejected, and a full session marks new candidates
+  `daily_cap_reached`;
+- an open run appearing between read and confirmation rejects the whole request and leaves the candidates
+  pending; a false `already_tracked` claim is rejected; the corrected request uses the freed slot;
+- two concurrent confirmations of one session: one succeeds, one is rejected, three runs in total;
+- a confirmation and a second collection committed while the candidate read is in progress: the response
+  still shows the earlier state everywhere (four pending candidates, `pending` 4, no open run, three slots,
+  one collection); a fresh read shows the new state, and a confirmation built from the earlier read is
+  rejected with `nothing_pending`. The same check against the previous read code returned pending candidates
+  with open runs, `pending` 0 and two collections in one response;
+- a confirmation that waited about 1.5 seconds for the session lock gets a `decided_at` after the wait; a quote
+  received after the decision but timed before it does not activate the run, the next later quote does; a
+  version 1 run still activates with a quote timed before its creation;
+- reports: an on-time selection is measured in `horizons` with collection date, selection time and reference
+  shown separately; late selections appear only in `late_horizons`; the second execution summary counts six
+  candidates, seven eligible observations and two selections;
+- transition: a session with a collection stored before the policy column stays automatic, creates its run
+  at registration and is refused by the selection read;
+- under the assisted policy a session date that differs from the one derived from the clock and calendar is
+  rejected, as is an observation time in the future;
+- the hash of a schema 2 payload equals the value computed with the code before this change; schema 2 rejects
+  the schema 3 fields;
+- grants: the reader cannot confirm; the collector cannot update decision identity columns, update
+  selections or delete decisions; the reader cannot update decisions. The collector now reads
+  `trading_days`, which the monitoring check verifies, and still cannot change it;
+- the migration check seeds version 2, keeps legacy collections without a version, refuses to downgrade while
+  an assisted collection exists, and finds no model drift with 14 tables.
+
+`claude plugin validate ./plugin` passed and `make package` built `dist/stock-radar-0.8.0.zip`. The
+synthetic plugin examples validate against the service contracts.
+
+Not validated: the migration on any persistent database or on the VPS, the plugin in Cowork, the real
+TradingView volume and sector columns and their units, research pages opened by Cowork, the credential
+installed in the bridge, and any scheduled run. No provider, market page or production service was called.

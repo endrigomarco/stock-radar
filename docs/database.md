@@ -2,8 +2,9 @@
 
 ## Implementation status
 
-Twelve normalized tables are defined in `src/stock_radar/db/models.py` by the initial Alembic revision
-`807ca9561c9f` and the quote monitoring revision `b4d1c7e9a2f3`. They support multiple sources, shared
+Fourteen normalized tables are defined in `src/stock_radar/db/models.py` by the initial Alembic revision
+`807ca9561c9f`, the quote monitoring revision `b4d1c7e9a2f3` and the assisted selection revision
+`e7c4b2a9d1f6`. They support multiple sources, shared
 instruments and multiple versioned experiments.
 The revision was applied to the local development database on 2026-10-07; Alembic reported no model/schema
 drift. Revision `b4d1c7e9a2f3` has only been applied to disposable test databases. It seeds experiment
@@ -49,6 +50,11 @@ erDiagram
     trigger_levels ||--o| trigger_events : first_hit
     webhook_receipts |o--o{ trigger_events : supports
     price_quotes |o--o{ trigger_events : supports
+    experiment_versions |o--o{ collection_runs : governs
+    experiment_versions ||--o{ candidate_selections : governs
+    candidate_selections |o--o{ candidate_decisions : records
+    signal_observations ||--o{ candidate_decisions : candidate
+    tracking_runs |o--o{ candidate_decisions : starts_or_reuses
     instruments ||--o{ price_quotes : quoted
     sources ||--o{ price_quotes : provides
 ```
@@ -80,6 +86,8 @@ That capability is structural only: no additional analysis methods or generic st
 | `price_quotes` | Instrument and source FKs, price, provider market time `quoted_at`, `received_at` | Unique `(instrument_id, source_id, quoted_at)`; positive price |
 | `trading_days` | `day`, `is_open`, local `opens_at` and `closes_at`, description, `origin`, `source_reference`, `consulted_on`; one row per covered calendar day | Unique `day`; hours present exactly when open, opening before closing; `origin` in `existing_configuration`, `b3_official`, `national_holidays` |
 | `trigger_events` | Level FK and exactly one of receipt FK or price quote FK, supported occurrence time, observed price, evidence quality | Unique `trigger_level_id`; positive supplied price; allowed evidence quality; exactly one evidence reference |
+| `candidate_selections` | One confirmed selection: client identity/hash, version FK, session date, criteria version, ranking basis, summary, reason for selecting none, declared plugin version, `decided_at`, `late` | Unique `client_selection_id`; SHA-256 hex shape; ranking basis `full` or `limited` |
+| `candidate_decisions` | One candidate per version, session and instrument: origin observation, optional selection, outcome, reason code, rank, baseline rank, slot, tracking run, rationale, JSONB details (evidence, unavailable information, risks), `decided_at` | Unique `(experiment_version_id, market_session_date, instrument_id)` and `(experiment_version_id, market_session_date, slot)`; slot exactly for `selected`; run required for `selected` and `already_tracked`; `decided_at` null exactly while `pending` |
 
 No extra status, currency, percentage or rating lookup tables are needed. Signal and analysis kinds are
 extensible text identifiers whose supported values will be validated by application services. Ratings
@@ -94,6 +102,7 @@ silently merge instruments on a bare ticker. No alias or corporate-action tables
 
 - Collection status: `complete`, `partial`, `failed`.
 - Observation parse status: `valid`, `partial`, `invalid`.
+- Candidate outcome: `pending`, `selected`, `not_selected`, `not_assessable`, `already_tracked`.
 - Tracking status: `prepared`, `active`, `completed`, `cancelled`, `expired`. There is no separate active
   flag. `admitted_at` null means a prepared run is waiting for a monitoring slot.
 - Price coverage and per-level alert coverage: `unknown`, `partial`, `verified`.
@@ -162,10 +171,21 @@ downgrade refuses to run while polling runs without a reference, expired runs or
 instead of deleting them. Run `make db-access` after `make db-migrate`: collection registration needs the new
 grants on experiments and tracking runs.
 
+Revision `e7c4b2a9d1f6` adds optional `volume` and `sector` to `signal_observations`, a nullable
+`collection_runs.experiment_version_id` recording the policy that governed each new collection, the two
+selection tables, and seeds version 2 of `tradingview_losers_strong_buy` with the version 1 rules plus
+`candidate_selection`. Existing rows are not rewritten: earlier collections keep a null version and their
+sessions stay under version 1. The schema caps neither the number of slots nor the rules; the service checks
+the limit from the version rules under a per-session advisory lock, and the unique slot key prevents two
+transactions from taking the same slot. Selected runs store the decision instant in `created_at`. The
+downgrade refuses to run while candidate decisions, selections, assisted collections or runs, or volume and
+sector values exist, and then removes version 2 only. Run `make db-access` after `make db-migrate`: the
+collector needs the new grants.
+
 ## Code-first workflow
 
 SQLAlchemy models are the source of the intended schema. `src/stock_radar/db/models.py` owns the
-shared declarative Base and currently defines all twelve mapped models. Alembic loads its
+shared declarative Base and currently defines all fourteen mapped models. Alembic loads its
 metadata through `migrations/env.py`. No table creation occurs on import or application startup.
 Use Alembic revisions, not `Base.metadata.create_all()`, to evolve persistent databases.
 

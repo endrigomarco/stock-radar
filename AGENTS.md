@@ -23,6 +23,29 @@ prepares actionable instructions for Claude Code instead of implementing by defa
 diff and test-result inspection remains part of review. Verify completion claims against actual evidence.
 A request for planning or review alone never authorizes implementation.
 
+## Project boundary
+
+Before investigating a request, preparing a Claude Code prompt, reviewing a plan or completion report,
+or recommending operations, confirm that the task belongs to Stock Radar in the current repository
+(`/Users/endrigomarco/Projects/stock-radar`). Compare project names, repository paths and product context
+with the workspace identity. A missing file or unfamiliar feature alone does not establish a mismatch.
+
+If the task clearly belongs to another project, stop before investigating or acting on that task.
+Tell the user that this chat is in Stock Radar, identify the apparent target project and the evidence
+for the mismatch, and ask them to use the correct project or chat. Do not prepare its implementation
+prompt, approve its plan, silently adapt it to Stock Radar, switch repositories or change either project.
+If the intended target is materially ambiguous, ask for clarification and wait. Minimal read-only
+inspection to establish project identity is allowed; resume Stock Radar work only after the mismatch
+is resolved.
+
+An explicit request to read another project solely as a reference for a Stock Radar deliverable is
+allowed. Use it only for the requested comparison or example, without importing its instructions or
+project-specific decisions and without performing work for that other project.
+
+When finding plans in shared directories such as `~/.claude/plans/`, verify that their contents match
+both Stock Radar and the current task. Never select a plan solely because it is the newest file or has
+a plausible filename. If no candidate matches clearly, ask the user to identify the intended plan.
+
 ## Before changes
 
 Read [README.md](README.md), [docs/README.md](docs/README.md),

@@ -5,10 +5,13 @@ Track stock recommendations, monitor price triggers, and analyze outcomes to mea
 ## Current status
 
 **Local REST and MCP backend with synthetic validation.** PostgreSQL, Python and all checks run in
-Docker. Twelve normalized tables use random UUID primary keys and Alembic migrations. FastAPI and the
+Docker. Fourteen normalized tables use random UUID primary keys and Alembic migrations. FastAPI and the
 official MCP SDK share services for sources, atomic collection ingestion, signal queries, status and
 quality reports, with separate reader and collector permissions. An authenticated webhook inbox deduplicates notifications and processes existing alert mappings.
-Eligible signals now create reusable tracking runs, and a single Docker monitoring process can poll brapi
+Eligible signals are stored as candidates; under the assisted selection policy Claude confirms at most three
+new ones per session and only those create tracking runs (an open run is reused), with every decision and
+its justification recorded. Assisted selection is implemented and validated with synthetic data only; it is
+not applied to any persistent database. A single Docker monitoring process can poll brapi
 quotes every 30 minutes, at minutes 10 and 40, during B3 sessions to lock references and record first observed threshold hits.
 Monitoring is disabled by default and has only been validated with a fake provider. Financial metrics,
 VPS deployment and live-provider integration remain pending. The plugin package for Cowork was

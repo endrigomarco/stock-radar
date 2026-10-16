@@ -7,7 +7,8 @@ does not depend on this file being readable at runtime.
 
 The Stock Radar backend exposes MCP tools: `list_sources`, `register_source`, `register_collection`,
 `get_collection`, `list_signals`, `service_status`, `data_quality_report`, `list_tracking_runs`,
-`list_latest_quotes`, `list_trigger_events` and `cancel_tracking_run`. Discover the tools actually present
+`list_latest_quotes`, `list_trigger_events`, `daily_report`, `list_selection_candidates`,
+`confirm_selection` and `cancel_tracking_run`. Discover the tools actually present
 in the session before use. If a required tool is absent, report it and stop the dependent operation. Never
 invent tool names, service addresses, credentials or successful writes. No direct SQL, no guessed endpoints.
 
@@ -22,7 +23,11 @@ necessarily a newly issued recommendation.
 
 ## Tracking
 
-Registering a collection creates or reuses one open tracking run per eligible instrument. A server process
+Every registered row is stored as a candidate of its session. Under the assisted policy, tracking starts
+only for candidates confirmed by `confirm_selection`, at most three new ones per session; a stock with an
+open run reuses it without using a slot. Sessions that began under the earlier automatic policy created or
+reused one open run per eligible instrument at registration. The reference of an assisted run is never
+quoted before the server accepted the decision. A server process
 sets the reference from polled quotes, creates six signed levels (1%, 2%, 3%) and records first observed
 hits. Skills never supply a reference, compute levels or start tracking. Polled coverage is partial: no
 recorded hit is not evidence of no crossing. Provider alert creation is not implemented.

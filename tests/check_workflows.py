@@ -1,6 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -9,12 +8,14 @@ from sqlalchemy.exc import DBAPIError
 
 from stock_radar.app import create_app
 from stock_radar.settings import Settings
+from synthetic_session import recent_open_session
 
 
 def main() -> None:
     settings = Settings.from_environment()
     reader = {"Authorization": f"Bearer {settings.reader_token.get_secret_value()}"}
     collector = {"Authorization": f"Bearer {settings.collector_token.get_secret_value()}"}
+    calendar_engine = create_engine(settings.database_url(write=True))
     with TestClient(create_app(settings), base_url="http://localhost:8000") as client:
         def call(tool, arguments, headers=reader):
             response = client.post("/mcp", headers={**headers, "Accept": "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25"}, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments}})
@@ -26,7 +27,7 @@ def main() -> None:
         initialized = client.post("/mcp", headers=mcp_headers, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "synthetic-check", "version": "1"}}})
         assert initialized.status_code == 200, initialized.text
         listed = client.post("/mcp", headers=mcp_headers, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}).json()["result"]["tools"]
-        assert {item["name"] for item in listed} == {"list_sources", "register_source", "register_collection", "get_collection", "list_signals", "service_status", "data_quality_report", "list_tracking_runs", "list_latest_quotes", "list_trigger_events", "cancel_tracking_run", "daily_report"}
+        assert {item["name"] for item in listed} == {"list_sources", "register_source", "register_collection", "get_collection", "list_signals", "service_status", "data_quality_report", "list_tracking_runs", "list_latest_quotes", "list_trigger_events", "cancel_tracking_run", "daily_report", "list_selection_candidates", "confirm_selection"}
         assert call("register_source", {"request": {"code": "forbidden", "name": "Forbidden"}})["isError"]
         source_request = {"code": "tradingview", "name": "TradingView"}
         response = client.post("/v1/sources", headers=collector, json=source_request)
@@ -34,14 +35,16 @@ def main() -> None:
         source = response.json()
         assert call("register_source", {"request": source_request}, collector)["structuredContent"]["id"] == source["id"]
         assert client.post("/v1/sources", headers=collector, json={**source_request, "name": "Changed"}).status_code == 409
-        now = datetime.now(timezone.utc).isoformat()
+        session_day, observed = recent_open_session(calendar_engine)
+        now = observed.isoformat()
         row = {"exchange": "SYNTH", "symbol": "TEST1", "currency": "BRL", "source_symbol": "SYNTH:TEST1", "signal_kind": "analyst_consensus", "original_rating": "Viés de alta forte", "observed_price": "10.25", "daily_change_percent": "-2.5", "observed_at": now}
-        payload = {"client_collection_id": str(uuid4()), "source_id": source["id"], "source_url": "https://example.invalid/synthetic", "observed_at": now, "market_session_date": now[:10], "status": "partial", "schema_version": 2, "rows_examined": 5, "observations": [row, {**row, "symbol": "TEST2", "original_rating": "Strong Buy", "observed_price": None}, {**row, "symbol": "TEST3"}]}
+        payload = {"client_collection_id": str(uuid4()), "source_id": source["id"], "source_url": "https://example.invalid/synthetic", "observed_at": now, "market_session_date": session_day.isoformat(), "status": "partial", "schema_version": 2, "rows_examined": 5, "observations": [row, {**row, "symbol": "TEST2", "original_rating": "Strong Buy", "observed_price": None}, {**row, "symbol": "TEST3"}]}
         response = client.post("/v1/collections", headers=collector, json=payload)
         assert response.status_code == 200, response.text
         receipt = response.json()
         assert receipt["observation_count"] == 3 and receipt["eligible_count"] == 3 and receipt["incomplete_count"] == 1
         assert receipt["rows_examined"] == 5 and receipt["source_total"] is None
+        assert receipt["selection_policy"] == "assisted" and receipt["candidates_pending"] == 3 and receipt["selection_slots_remaining"] == 3, receipt
         replay = call("register_collection", {"request": payload}, collector)
         assert replay["structuredContent"]["duplicate"] and replay["structuredContent"]["id"] == receipt["id"], replay
         assert call("get_collection", {"collection_id": receipt["id"]})["structuredContent"]["observation_count"] == 3
@@ -73,6 +76,7 @@ def main() -> None:
         assert "collections" in call("service_status", {})["structuredContent"]["capabilities"]
         assert len(call("list_sources", {"query": {}})["structuredContent"]["items"]) == 1
         assert client.post("/v1/collections", headers=collector, content=b"x" * 1048577).status_code == 413
+    calendar_engine.dispose()
     engine = create_engine(settings.database_url(write=True))
     for statement in ["DELETE FROM collection_runs", "SELECT * FROM webhook_receipts"]:
         try:

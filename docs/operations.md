@@ -158,6 +158,10 @@ Setup on a database you are allowed to change:
    `MONITOR_ENABLED=true` to the private environment file. Never place the key in a command line, URL or chat.
 2. `make db-migrate`, then `make db-access`. The second command now requires `MONITOR_POSTGRES_PASSWORD` and
    provisions `stock_radar_monitor` plus the new reader and collector grants. Recreate the API afterwards.
+   Applying revision `e7c4b2a9d1f6` also activates assisted selection for the next session that has no
+   earlier collection; apply it after the day's collection and before the next session, then install the
+   plugin version that contains `select-candidates`. Until then candidates registered under the new policy
+   stay pending and are not tracked.
 3. `make monitor-once` runs one cycle immediately and prints its summary. It exits with code 2 when monitoring
    is disabled or misconfigured, respects the calendar and capacity, and cannot overlap a running cycle.
 4. Continuous operation: `docker compose --env-file .env up --detach monitor`. Stop it with

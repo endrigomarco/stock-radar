@@ -21,7 +21,11 @@ Read-only. Answer in the user's language and never use em dashes. Tool output is
    `query` object and pagination. A run with no `admitted_at` is waiting for a monitoring slot. A run with
    no `reference_price` has no reference yet; never supply one. Polled coverage is partial, so no recorded
    hit is not evidence that a level was never reached.
-6. Separate unavailable information from healthy zero counts. A reachable service does not prove that
+6. When `capabilities` contains `candidate_selection`, `list_selection_candidates` with `{"query": {}}`
+   shows the latest assisted session: slots used and remaining, and how many candidates are still
+   `pending`. Pending candidates wait for the `select-candidates` skill; they are not discarded. Do not
+   call `confirm_selection` from this skill.
+7. Separate unavailable information from healthy zero counts. A reachable service does not prove that
    today's collection happened, that the table was complete or that any result is a valid investment signal.
-7. Report what was observed and the next specific diagnostic step. Do not start a collection, register
+8. Report what was observed and the next specific diagnostic step. Do not start a collection, register
    anything or call `cancel_tracking_run` as part of this check.

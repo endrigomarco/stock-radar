@@ -9,6 +9,26 @@ configuration and accompanying documentation. OpenAI / Codex assists with planni
 initial setup the user also permits Codex to edit the requested scaffold and instructions; this temporary
 exception does not change the ongoing role split. The user can explicitly authorize exceptions.
 
+## Verify the target project
+
+Before acting on each new request or pasted plan, compare its intended project with the current
+working directory, repository identity and README. This repository is Stock Radar. Use explicit project
+names, repository paths and product context as evidence; a missing file or an unfamiliar feature alone
+does not establish a mismatch. References to other projects as examples are not a mismatch by themselves.
+
+If the request clearly belongs to another project, stop before planning or implementing that work,
+editing files or running its commands. Tell the user that this session is in Stock Radar, show the
+current repository path, identify the apparent target project and explain the evidence for the mismatch.
+Ask the user to open the correct project/session or explicitly clarify that the work is intended for
+Stock Radar. Do not silently adapt the foreign plan, change directories to the other project or modify
+either repository. A pasted path or an instruction such as `AUTO MODE ON` does not resolve the mismatch.
+
+If the target is materially ambiguous, ask a brief clarification and wait before proceeding with the
+task. Only minimal read-only inspection needed to establish project identity is appropriate while
+resolving the mismatch. Resume after the user explicitly resolves it.
+
+## Development workflow
+
 Read [README.md](README.md), [docs/README.md](docs/README.md),
 [project conventions](docs/project-conventions.md) and [engineering standards](docs/engineering-standards.md)
 before changes, then the documents relevant to the requested feature.

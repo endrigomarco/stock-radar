@@ -1,12 +1,15 @@
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from stock_radar.db.models import (
+    CandidateDecision,
+    CandidateSelection,
     CollectionRun,
     Experiment,
     ExperimentVersion,
@@ -19,6 +22,7 @@ from stock_radar.db.models import (
 )
 from stock_radar.market_calendar import SessionBounds, TradingCalendar, load_calendar, market_date
 from stock_radar.services.collections import eligible_expression
+from stock_radar.services.policy import PolicyResolver, SelectionRules, selection_rules
 from stock_radar.services.tracking import EXPERIMENT_CODE, OPEN_STATUSES, TrackingService
 from stock_radar.viewmodels.reports import (
     CollectionGroup,
@@ -28,6 +32,8 @@ from stock_radar.viewmodels.reports import (
     MilestoneOutput,
     QuoteReading,
     RateBlock,
+    SelectionRecord,
+    SelectionSummary,
     SignalProgress,
     TargetRate,
 )
@@ -42,6 +48,11 @@ RETURN_STEP = Decimal("0.01")
 RATE_STEP = Decimal("0.1")
 ONE_DAY = timedelta(days=1)
 REPORT_ISOLATION = "REPEATABLE READ"
+DECISION_LINKS = {"pending": "selection_pending", "not_selected": "not_selected", "not_assessable": "not_assessable", "already_tracked": "already_tracked"}
+EMPTY_PROGRESS = {
+    "status": None, "pending_reason": None, "reference_price": None, "reference_at": None, "reference_session_date": None,
+    "expires_at": None, "latest_quote": None, "milestones": [], "target_order": None,
+}
 
 
 @dataclass
@@ -101,6 +112,21 @@ def _return_percent(price: Decimal, reference: Decimal) -> Decimal:
     return ((price / reference - 1) * PERCENT_BASE).quantize(RETURN_STEP, rounding=ROUND_HALF_UP)
 
 
+@dataclass(frozen=True)
+class SessionPolicy:
+    version: ExperimentVersion | None
+    rules: SelectionRules | None
+
+
+@dataclass(frozen=True)
+class DayInput:
+    day: date
+    policy: SessionPolicy
+    collection_ids: list[UUID]
+    observations: list
+    decisions: list[tuple[CandidateDecision, CandidateSelection | None]]
+
+
 class ReportService:
     def __init__(self, session: Session, now: datetime | None = None) -> None:
         self.session = session
@@ -116,8 +142,10 @@ class ReportService:
         facts = self._facts({row.instrument_id for row, _, _ in observations}, generated_at)
         version = TrackingService(self.session).current_version()
         window_last = int(version.rules["window_sessions"]) - 1 if version is not None else None
+        policies = {day: self._policy(day) for day in page}
+        decisions = self._decisions({day: policy for day, policy in policies.items() if policy.rules is not None})
         groups = [
-            self._group(day, collections[day], [item for item in observations if item[1].market_session_date == day], facts, generated_at, request, window_last)
+            self._group(DayInput(day, policies[day], collections[day], [item for item in observations if item[1].market_session_date == day], decisions.get(day, [])), facts, generated_at, request, window_last)
             for day in page
         ]
         self.session.rollback()
@@ -212,32 +240,107 @@ class ReportService:
                 and item.run.reference_at <= quote.quoted_at <= bounded[item.run.id]
             ]
 
-    def _group(self, day: date, collection_ids: list[UUID], observations: list, facts: dict[UUID, RunFacts], generated_at: datetime, request: DailyReportQuery, window_last: int | None) -> CollectionGroup:
-        own_by_observation = {item.run.signal_observation_id: item for item in facts.values()}
-        rows = []
-        own: list[RunFacts] = []
-        for observation, collection, instrument in observations:
-            item = own_by_observation.get(observation.id)
-            if item is not None:
-                own.append(item)
-            rows.append(_signal_row(observation, collection, instrument, item, facts, generated_at))
+    def _policy(self, day: date) -> SessionPolicy:
+        version = PolicyResolver(self.session).for_session(day)
+        return SessionPolicy(version, selection_rules(version.rules) if version is not None else None)
+
+    def _decisions(self, policies: dict[date, SessionPolicy]) -> dict[date, list[tuple[CandidateDecision, CandidateSelection | None]]]:
+        grouped: dict[date, list] = {day: [] for day in policies}
+        if not policies:
+            return grouped
+        conditions = [(CandidateDecision.experiment_version_id == policy.version.id) & (CandidateDecision.market_session_date == day) for day, policy in policies.items()]
+        rows = self.session.execute(
+            select(CandidateDecision, CandidateSelection)
+            .outerjoin(CandidateSelection, CandidateSelection.id == CandidateDecision.candidate_selection_id)
+            .where(or_(*conditions)).order_by(CandidateDecision.id)
+        ).all()
+        for decision, selection in rows:
+            grouped[decision.market_session_date].append((decision, selection))
+        return grouped
+
+    def _group(self, entry: DayInput, facts: dict[UUID, RunFacts], generated_at: datetime, request: DailyReportQuery, window_last: int | None) -> CollectionGroup:
+        if entry.policy.rules is None:
+            rows, own, late = _automatic_rows(entry.observations, facts, generated_at)
+        else:
+            rows, own, late = _assisted_rows(entry, facts, generated_at)
+        tracked = own + late
         links = [row.tracking_link for row in rows]
-        statuses = [item.run.status for item in own]
-        prepared = [item for item in own if item.run.status == "prepared"]
+        statuses = [item.run.status for item in tracked]
+        prepared = [item for item in tracked if item.run.status == "prepared"]
         start = request.signal_offset
         return CollectionGroup(
-            market_session_date=day, collection_ids=collection_ids, signals=len(rows),
-            own_runs=len(own), reused_confirmed=links.count("reused_confirmed"), unconfirmed_links=links.count("unconfirmed"),
-            with_reference=sum(1 for item in own if item.run.reference_at is not None),
+            market_session_date=entry.day, selection_policy="automatic" if entry.policy.rules is None else "assisted",
+            experiment_version=entry.policy.version.version if entry.policy.version is not None else None,
+            collection_ids=entry.collection_ids, signals=len(rows),
+            own_runs=len(tracked), reused_confirmed=links.count("reused_confirmed") + links.count("already_tracked"), unconfirmed_links=links.count("unconfirmed"),
+            with_reference=sum(1 for item in tracked if item.run.reference_at is not None),
             waiting_slot=sum(1 for item in prepared if item.run.admitted_at is None),
             waiting_quote=sum(1 for item in prepared if item.run.admitted_at is not None),
             active=statuses.count("active"), completed=statuses.count("completed"),
             expired=statuses.count("expired"), cancelled=statuses.count("cancelled"),
             horizons=[_horizon(sessions, own, generated_at, window_last) for sessions in MILESTONE_SESSIONS],
             target_order=_order_counts(own, generated_at),
+            late_horizons=[_horizon(sessions, late, generated_at, window_last) for sessions in MILESTONE_SESSIONS] if late else [],
+            late_target_order=_order_counts(late, generated_at) if late else {},
+            selection=self._summary(entry, len(late)) if entry.policy.rules is not None else None,
             items=rows[start:start + request.signal_limit], signal_limit=request.signal_limit,
             signal_offset=start, signals_has_more=len(rows) > start + request.signal_limit,
         )
+
+    def _summary(self, entry: DayInput, selected_late: int) -> SelectionSummary:
+        decisions = [decision for decision, _ in entry.decisions]
+        outcomes = [decision.outcome for decision in decisions]
+        statuses = self.session.execute(
+            select(CollectionRun.status, func.count(CollectionRun.id)).where(CollectionRun.market_session_date == entry.day).group_by(CollectionRun.status)
+        ).all()
+        selections = {selection.id: selection for _, selection in entry.decisions if selection is not None}
+        return SelectionSummary(
+            experiment_version=entry.policy.version.version, criteria_version=entry.policy.rules.criteria_version,
+            max_new_per_session=entry.policy.rules.max_new_per_session, collection_statuses={status: count for status, count in statuses},
+            eligible_observations=len(entry.observations), candidates=len(decisions), new_candidates=len(decisions) - outcomes.count("already_tracked"),
+            already_tracked=outcomes.count("already_tracked"), selected=outcomes.count("selected"),
+            selected_on_time=outcomes.count("selected") - selected_late, selected_late=selected_late,
+            not_selected=dict(Counter(decision.reason_code for decision in decisions if decision.outcome == "not_selected")),
+            not_assessable=outcomes.count("not_assessable"), pending=outcomes.count("pending"),
+            selections=[
+                SelectionRecord(id=item.id, decided_at=item.decided_at, late=item.late, ranking_basis=item.ranking_basis, no_selection_reason=item.no_selection_reason)
+                for item in sorted(selections.values(), key=lambda selection: (selection.decided_at, selection.id))
+            ],
+        )
+
+
+def _automatic_rows(observations: list, facts: dict[UUID, RunFacts], generated_at: datetime) -> tuple[list[SignalProgress], list[RunFacts], list[RunFacts]]:
+    own_by_observation = {item.run.signal_observation_id: item for item in facts.values()}
+    rows, own = [], []
+    for observation, collection, instrument in observations:
+        item = own_by_observation.get(observation.id)
+        if item is not None:
+            own.append(item)
+        rows.append(_signal_row(observation, collection, instrument, item, facts, generated_at))
+    return rows, own, []
+
+
+def _assisted_rows(entry: DayInput, facts: dict[UUID, RunFacts], generated_at: datetime) -> tuple[list[SignalProgress], list[RunFacts], list[RunFacts]]:
+    by_observation = {observation.id: (observation, collection, instrument) for observation, collection, instrument in entry.observations}
+    rows, on_time, late = [], [], []
+    for decision, selection in entry.decisions:
+        observation, collection, instrument = by_observation[decision.signal_observation_id]
+        item = facts.get(decision.tracking_run_id) if decision.outcome == "selected" else None
+        if item is not None:
+            (late if selection.late else on_time).append(item)
+            row = _signal_row(observation, collection, instrument, item, facts, generated_at)
+        else:
+            origin = facts.get(decision.tracking_run_id)
+            row = SignalProgress(
+                **_base(observation, collection, instrument), **EMPTY_PROGRESS, tracking_link=DECISION_LINKS[decision.outcome],
+                tracking_run_id=decision.tracking_run_id, origin_market_session_date=origin.origin_date if origin is not None else None,
+            )
+        rows.append(row.model_copy(update={
+            "selection_outcome": decision.outcome, "selection_reason": decision.reason_code, "selection_rank": decision.rank,
+            "selected_at": selection.decided_at if selection is not None else None, "selection_late": selection.late if selection is not None else None,
+        }))
+    rows.sort(key=lambda row: (row.symbol, row.observation_id))
+    return rows, on_time, late
 
 
 def _completion_time(item: RunFacts) -> datetime | None:
@@ -432,14 +535,8 @@ def _was_open_at(item: RunFacts, instant: datetime) -> bool:
 
 
 def _signal_row(observation: SignalObservation, collection: CollectionRun, instrument: Instrument, own: RunFacts | None, facts: dict[UUID, RunFacts], generated_at: datetime) -> SignalProgress:
-    base = {
-        "observation_id": observation.id, "collection_id": collection.id, "instrument_id": instrument.id,
-        "exchange": instrument.exchange, "symbol": instrument.symbol, "observed_at": observation.observed_at,
-    }
-    empty = {
-        "status": None, "pending_reason": None, "reference_price": None, "reference_at": None, "reference_session_date": None,
-        "expires_at": None, "latest_quote": None, "milestones": [], "target_order": None,
-    }
+    base = _base(observation, collection, instrument)
+    empty = EMPTY_PROGRESS
     if own is None:
         origin = _confirmed_origin(observation, facts)
         if origin is None:
@@ -459,3 +556,10 @@ def _signal_row(observation: SignalObservation, collection: CollectionRun, instr
         milestones=[_milestone(own, sessions, generated_at) for sessions in MILESTONE_SESSIONS],
         target_order=_target_order(own, generated_at),
     )
+
+
+def _base(observation: SignalObservation, collection: CollectionRun, instrument: Instrument) -> dict:
+    return {
+        "observation_id": observation.id, "collection_id": collection.id, "instrument_id": instrument.id,
+        "exchange": instrument.exchange, "symbol": instrument.symbol, "observed_at": observation.observed_at,
+    }

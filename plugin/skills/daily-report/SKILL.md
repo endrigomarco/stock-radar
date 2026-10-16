@@ -46,6 +46,20 @@ every 30 minutes, a level not recorded is "not observed", not proof that the pri
 
 For each collection date, in the order returned:
 
+**Policy.** Show `selection_policy` and `experiment_version` for every date, and never merge dates of
+different policies into one series. `automatic` is the earlier policy: every eligible stock started or
+reused tracking when registered, and `signals` counts eligible observations. `assisted` is the current
+policy: stocks are stored as candidates, at most `selection.max_new_per_session` new ones per session start
+tracking after a confirmed selection, and `signals` counts candidates, one row each.
+
+**Selection** (only `assisted`). From the `selection` object: collections by `collection_statuses`,
+`eligible_observations`, `candidates`, `new_candidates`, `already_tracked`, `selected` with
+`selected_on_time` and `selected_late`, `not_selected` by reason, `not_assessable` and `pending`. For each
+item of `selections` show `decided_at` in America/Sao_Paulo, whether it is `late`, its `ranking_basis` and
+any `no_selection_reason`. With `candidates` 0, say that no eligible candidate was registered and whether
+the collections were `complete` or `partial`. Pending candidates are not discarded: say they still wait for
+a decision. Not selected candidates are not tracked, so nothing is measured for them.
+
 **Totals.** `signals`, `own_runs`, `reused_confirmed`, `unconfirmed_links`, `with_reference`,
 `waiting_slot`, `waiting_quote`, `active`, `completed`, `expired`, `cancelled`. Say once that the rates
 measure the tracking runs started by that collection date, not every stock listed that day.
@@ -61,6 +75,14 @@ measure the tracking runs started by that collection date, not every stock liste
 - `reused_confirmed`: tracked by an earlier run started on `origin_market_session_date`; not counted again
   in this date.
 - `unconfirmed`: no confirmed origin run. Do not guess one.
+- `already_tracked` (assisted): the stock already had an open run, started on `origin_market_session_date`
+  when known; it used no slot and is not counted again.
+- `selection_pending`, `not_selected`, `not_assessable` (assisted): no tracking. Show `selection_reason`.
+
+For assisted rows also show `selection_outcome`, `selection_rank` and, for selected stocks, three separate
+times: the collection date (the date of the group), `selected_at` (when the selection was confirmed) and
+`reference_at` (start of tracking). Mark `selection_late` true as a late selection: it was confirmed after
+the next session opened, so it cannot be presented as a choice made on the collection date.
 
 Milestones are `sessions` 1, 2, 5, 10, 19 and 20. Label 19 as "end of the 20 session window (D+19)" when
 `window_end` is true.
@@ -108,6 +130,10 @@ applied the same way to runs that reached a target and runs that did not. A run 
 the partial block early in a session and enter it after its first quote of the day.
 
 For a horizon with `state` `out_of_window`, write that D+20 is outside the current 20 session window.
+
+For assisted dates, `horizons` and `target_order` cover only selections confirmed on time. When
+`late_horizons` is not empty, present it after them, with `late_target_order`, under a heading that says
+these are late selections, with the same rules. Never add on time and late counts together.
 
 **Observed risk.** Show the negative targets from the same blocks, then `target_order`: `up_first`
 (+2% observed before -2%), `down_first`, `only_up`, `only_down`, `neither`, `indeterminate` and

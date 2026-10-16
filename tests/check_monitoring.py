@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from stock_radar import brapi
 from stock_radar.app import create_app
 from stock_radar.db.config import database_url
-from stock_radar.db.models import Experiment, ExperimentVersion, Instrument, PriceQuote, SignalObservation, TrackingRun, TradingDay, TriggerEvent, TriggerLevel
+from stock_radar.db.models import CollectionRun, Experiment, ExperimentVersion, Instrument, PriceQuote, SignalObservation, TrackingRun, TradingDay, TriggerEvent, TriggerLevel
 from stock_radar.market_calendar import CalendarUnavailable, load_calendar, window_close
 from stock_radar.monitor import run_cycle, seconds_until_next_slot
 from stock_radar.observability.telemetry import Telemetry
@@ -159,9 +159,10 @@ def check_calendar(admin, monitor_engine, collector_engine, reader_engine) -> No
         assert error.year == 2027
     else:
         raise AssertionError("A day outside the loaded range was treated as covered")
-    with monitor_engine.connect() as connection:
-        assert connection.scalar(text("SELECT count(*) FROM trading_days")) == 1096
-    for engine, statement in [(monitor_engine, "DELETE FROM trading_days"), (monitor_engine, "UPDATE trading_days SET is_open = false, opens_at = NULL, closes_at = NULL"), (collector_engine, "SELECT 1 FROM trading_days"), (reader_engine, "DELETE FROM trading_days")]:
+    for engine in (monitor_engine, collector_engine):
+        with engine.connect() as connection:
+            assert connection.scalar(text("SELECT count(*) FROM trading_days")) == 1096
+    for engine, statement in [(monitor_engine, "DELETE FROM trading_days"), (monitor_engine, "UPDATE trading_days SET is_open = false, opens_at = NULL, closes_at = NULL"), (collector_engine, "UPDATE trading_days SET is_open = false, opens_at = NULL, closes_at = NULL"), (reader_engine, "DELETE FROM trading_days")]:
         try:
             with engine.begin() as connection:
                 connection.execute(text(statement))
@@ -219,6 +220,11 @@ def main() -> None:
 
     with TestClient(create_app(settings), base_url="http://localhost:8000") as client:
         source = client.post("/v1/sources", headers=collector, json={"code": "tradingview", "name": "TradingView"}).json()
+        with admin.begin() as connection:
+            connection.execute(CollectionRun.__table__.insert().values(
+                client_collection_id=uuid4(), source_id=source["id"], payload_hash="c" * 64, source_url="https://example.invalid/pre-migration",
+                observed_at=at(3, 16, 9), received_at=at(3, 16, 9), market_session_date=date(2026, 3, 16), status="complete", rows_examined=0,
+            ))
 
         def collect(symbol: str, observed_at: datetime) -> None:
             row = {"exchange": "MON", "symbol": symbol, "currency": "BRL", "source_symbol": "MON:" + symbol, "signal_kind": "analyst_consensus", "original_rating": "Strong Buy", "observed_price": "10", "daily_change_percent": "-1.5", "observed_at": observed_at.isoformat()}
@@ -247,10 +253,10 @@ def main() -> None:
         assert call("cancel_tracking_run", {"tracking_run_id": str(first.id)})["isError"]
 
         with admin.begin() as connection:
-            first_version = connection.execute(select(ExperimentVersion).join(Experiment, Experiment.id == ExperimentVersion.experiment_id).where(Experiment.code == EXPERIMENT_CODE)).one()
-            connection.execute(ExperimentVersion.__table__.insert().values(experiment_id=first_version.experiment_id, version=2, analysis_kind=first_version.analysis_kind, rules=first_version.rules))
+            first_version = connection.execute(select(ExperimentVersion).join(Experiment, Experiment.id == ExperimentVersion.experiment_id).where(Experiment.code == EXPERIMENT_CODE, ExperimentVersion.version == 1)).one()
+            connection.execute(ExperimentVersion.__table__.insert().values(experiment_id=first_version.experiment_id, version=3, analysis_kind=first_version.analysis_kind, rules=first_version.rules))
         with Session(admin) as session:
-            versions = session.scalars(select(ExperimentVersion).where(ExperimentVersion.experiment_id == first_version.experiment_id).order_by(ExperimentVersion.version)).all()
+            versions = session.scalars(select(ExperimentVersion).where(ExperimentVersion.experiment_id == first_version.experiment_id, ExperimentVersion.version.in_((1, 3))).order_by(ExperimentVersion.version)).all()
             session.expunge_all()
             instrument_id = session.scalar(select(Instrument.id).where(Instrument.exchange == "MON", Instrument.symbol == "AAAA3"))
             observations = session.scalars(select(SignalObservation.id).where(SignalObservation.instrument_id == instrument_id)).all()

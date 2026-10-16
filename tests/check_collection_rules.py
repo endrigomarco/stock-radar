@@ -7,9 +7,10 @@ from sqlalchemy.orm import Session
 
 from stock_radar.app import create_app
 from stock_radar.db import prune_collection
-from stock_radar.db.models import CollectionRun, Instrument, SignalObservation, TrackingRun
+from stock_radar.db.models import CandidateDecision, CollectionRun, ExperimentVersion, Instrument, SignalObservation, TrackingRun
 from stock_radar.services.tracking import TrackingService
 from stock_radar.settings import Settings
+from synthetic_session import recent_open_session
 
 ROWS_ON_PAGE = 4
 
@@ -23,8 +24,9 @@ def legacy_collection(session: Session, source_id: str, prefix: str, rows: list[
     session.add(collection)
     session.flush()
     tracking = TrackingService(session)
-    version = tracking.current_version()
-    assert version is not None
+    current = tracking.current_version()
+    assert current is not None
+    version = session.scalar(select(ExperimentVersion).where(ExperimentVersion.experiment_id == current.experiment_id, ExperimentVersion.version == 1))
     for index, row in enumerate(rows, start=1):
         symbol = f"{prefix}{index}"
         instrument = Instrument(exchange="LEGACY", symbol=symbol, currency="BRL")
@@ -55,14 +57,15 @@ def main() -> None:
 
     with TestClient(create_app(settings), base_url="http://localhost:8000") as client:
         source = client.post("/v1/sources", headers=collector, json={"code": "tradingview", "name": "TradingView"}).json()
-        now = datetime.now(timezone.utc).isoformat()
+        session_day, observed = recent_open_session(engine)
+        now = observed.isoformat()
 
         def row(symbol: str, **changes) -> dict:
             base = {"exchange": "RULES", "symbol": symbol, "currency": "BRL", "source_symbol": f"RULES:{symbol}", "signal_kind": "analyst_consensus", "source_column": "Synthetic analyst column", "original_rating": "Viés de alta forte", "observed_price": "12.34", "daily_change_percent": "-2.5", "observed_at": now}
             return {**base, **changes}
 
         def payload(observations: list[dict], **changes) -> dict:
-            base = {"schema_version": 2, "client_collection_id": str(uuid4()), "source_id": source["id"], "source_url": "https://example.invalid/synthetic-rules", "observed_at": now, "market_session_date": now[:10], "status": "complete", "source_total": ROWS_ON_PAGE, "rows_examined": ROWS_ON_PAGE, "observations": observations}
+            base = {"schema_version": 2, "client_collection_id": str(uuid4()), "source_id": source["id"], "source_url": "https://example.invalid/synthetic-rules", "observed_at": now, "market_session_date": session_day.isoformat(), "status": "complete", "source_total": ROWS_ON_PAGE, "rows_examined": ROWS_ON_PAGE, "observations": observations}
             return {**base, **changes}
 
         def post(body: dict):
@@ -96,7 +99,9 @@ def main() -> None:
         assert replay["duplicate"] is True and {**replay, "duplicate": False} == receipt, replay
         assert client.get("/v1/collections/" + receipt["id"], headers=reader).json() == receipt
         assert stored(SignalObservation, SignalObservation.collection_run_id == receipt["id"]) == 2
-        assert stored(TrackingRun, TrackingRun.signal_observation_id.in_(select(SignalObservation.id).where(SignalObservation.collection_run_id == receipt["id"]))) == 2
+        assert stored(TrackingRun, TrackingRun.signal_observation_id.in_(select(SignalObservation.id).where(SignalObservation.collection_run_id == receipt["id"]))) == 0
+        assert stored(CandidateDecision, CandidateDecision.outcome == "pending", CandidateDecision.signal_observation_id.in_(select(SignalObservation.id).where(SignalObservation.collection_run_id == receipt["id"]))) == 2
+        assert receipt["selection_policy"] == "assisted" and receipt["candidates_pending"] == 2, receipt
         assert post({**body, "rows_examined": 3, "status": "partial"}).status_code == 409
         signals = client.get("/v1/signals", headers=reader, params={"collection_id": receipt["id"]}).json()["items"]
         assert {item["original_rating"] for item in signals} == {"Viés de alta forte", "Strong Buy"} and all(item["eligible"] for item in signals)

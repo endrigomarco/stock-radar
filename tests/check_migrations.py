@@ -83,11 +83,27 @@ def main() -> None:
             assert all(row.admitted_at is None and row.reference_price == Decimal("10") and row.expires_at is not None for row in migrated.values())
             event = connection.execute(select(TriggerEvent).where(TriggerEvent.id == legacy_event)).one()
             assert event.webhook_receipt_id == legacy_receipt and event.price_quote_id is None
-            rules = connection.scalar(select(ExperimentVersion.rules).join(Experiment, Experiment.id == ExperimentVersion.experiment_id).where(Experiment.code == "tradingview_losers_strong_buy"))
-            assert rules["window_sessions"] == 20 and len(rules["signed_percents"]) == 6
+            seeded = dict(connection.execute(select(ExperimentVersion.version, ExperimentVersion.rules).join(Experiment, Experiment.id == ExperimentVersion.experiment_id).where(Experiment.code == "tradingview_losers_strong_buy")).all())
+            assert set(seeded) == {1, 2} and all(rules["window_sessions"] == 20 and len(rules["signed_percents"]) == 6 for rules in seeded.values())
+            assert "candidate_selection" not in seeded[1] and seeded[2]["candidate_selection"]["max_new_per_session"] == 3 and seeded[2]["candidate_selection"]["reference_after_decision"] is True
+            assert connection.scalar(select(CollectionRun.experiment_version_id).where(CollectionRun.id == legacy_collection)) is None
+            assisted_version = connection.scalar(select(ExperimentVersion.id).join(Experiment, Experiment.id == ExperimentVersion.experiment_id).where(Experiment.code == "tradingview_losers_strong_buy", ExperimentVersion.version == 2))
+        assisted_collection = insert(
+            CollectionRun, source_id=legacy_source, client_collection_id=uuid4(), payload_hash="d" * 64, source_url="https://example.invalid",
+            observed_at=now, market_session_date=now.date(), status="complete", experiment_version_id=assisted_version,
+        )
+        try:
+            command.downgrade(cfg, "d2f6a9c4b810")
+        except RuntimeError as error:
+            assert "Downgrade refused" in str(error) and "assisted candidate selection" in str(error)
+        else:
+            raise AssertionError("Downgrade discarded assisted selection records")
+        with engine.begin() as connection:
+            connection.execute(delete(CollectionRun).where(CollectionRun.id == assisted_collection))
+        reject(SignalObservation, "23514", collection_run_id=legacy_collection, instrument_id=legacy_instrument, signal_kind="negative_volume", source_symbol="LEGACY1", normalization_version="v1", observed_at=now, parse_status="valid", volume=-1)
         inspector = inspect(engine)
         assert set(inspector.get_table_names()) == set(Base.metadata.tables) | {"alembic_version"}
-        assert len(Base.metadata.tables) == 12
+        assert len(Base.metadata.tables) == 14
         for table in Base.metadata.tables:
             assert inspector.get_pk_constraint(table)["constrained_columns"] == ["id"]
         before = set((scripts / "versions").glob("*.py"))

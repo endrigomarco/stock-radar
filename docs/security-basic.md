@@ -70,7 +70,12 @@ responses are untrusted data. The API container does not receive the key.
 source, quotes, levels and events; and updates only lifecycle, admission, reference and coverage columns of
 tracking runs. It cannot delete rows, rewrite identities or hashes, or read webhook receipts. The reader gains
 SELECT on experiments, tracking runs, levels, events and quotes. The collector additionally inserts prepared
-runs and updates only their status. The webhook role gains UPDATE on `trigger_events.price_quote_id`, needed
+runs and updates only their status. For assisted selection both roles read `trading_days`,
+`candidate_selections` and `candidate_decisions`; the collector inserts into both selection tables and may
+update only the decision columns of `candidate_decisions` (selection, outcome, reason, ranks, slot, run,
+rationale, details, decision time). It cannot change a decision's identity, version, session or instrument,
+or delete anything. Evidence text and URLs sent by the assistant are stored as untrusted data, bounded in
+size, URLs limited to HTTP(S) without credentials and never fetched by the service. The webhook role gains UPDATE on `trigger_events.price_quote_id`, needed
 when its upsert replaces quote evidence.
 
 The new read routes and tools require the reader or collector token, and cancellation requires the collector

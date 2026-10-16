@@ -23,6 +23,7 @@ from stock_radar.db.models import (
 from stock_radar.market_calendar import CalendarUnavailable, TradingCalendar, window_close
 from stock_radar.observability.logging import emit
 from stock_radar.services.errors import ServiceError
+from stock_radar.services.policy import EXPERIMENT_CODE, advisory_lock, reference_after_decision
 from stock_radar.viewmodels.tracking import (
     LatestQuoteQuery,
     QuoteOutput,
@@ -35,7 +36,6 @@ from stock_radar.viewmodels.tracking import (
     TriggerEventQuery,
 )
 
-EXPERIMENT_CODE = "tradingview_losers_strong_buy"
 QUOTE_SOURCE_CODE = "brapi"
 QUOTE_SOURCE_NAME = "brapi"
 POLL_INTERVAL_MINUTES = 30
@@ -78,26 +78,44 @@ class TrackingService:
         )
 
     def attach(self, observation_id: UUID, instrument_id: UUID, version: ExperimentVersion) -> bool:
-        self._lock(f"stock_radar:tracking:{version.experiment_id}:{instrument_id}")
-        existing = self.session.scalar(
+        self.lock_instrument(version.experiment_id, instrument_id)
+        if self.open_run_id(instrument_id, version.experiment_id) is not None:
+            return False
+        self._create(observation_id, version)
+        return True
+
+    def lock_instrument(self, experiment_id: UUID, instrument_id: UUID) -> None:
+        self._lock(f"stock_radar:tracking:{experiment_id}:{instrument_id}")
+
+    def open_run_id(self, instrument_id: UUID, experiment_id: UUID) -> UUID | None:
+        return self.session.scalar(
             select(TrackingRun.id)
             .join(SignalObservation, SignalObservation.id == TrackingRun.signal_observation_id)
             .join(ExperimentVersion, ExperimentVersion.id == TrackingRun.experiment_version_id)
             .where(
                 SignalObservation.instrument_id == instrument_id,
-                ExperimentVersion.experiment_id == version.experiment_id,
+                ExperimentVersion.experiment_id == experiment_id,
                 TrackingRun.status.in_(OPEN_STATUSES),
-            ).limit(1)
+            ).order_by(TrackingRun.created_at, TrackingRun.id).limit(1)
         )
-        if existing is not None:
-            return False
+
+    def start_selected(self, observation_id: UUID, version: ExperimentVersion, decided_at: datetime) -> UUID:
+        used = self.session.scalar(select(TrackingRun.id).where(TrackingRun.signal_observation_id == observation_id).limit(1))
+        if used is not None:
+            raise ServiceError("observation_already_tracked", 409)
+        return self._create(observation_id, version, decided_at)
+
+    def _create(self, observation_id: UUID, version: ExperimentVersion, created_at: datetime | None = None) -> UUID:
         digest = hashlib.sha256(f"{version.id}:{observation_id}".encode()).hexdigest()
-        self.session.add(TrackingRun(
+        run = TrackingRun(
             client_tracking_id=uuid4(), payload_hash=digest,
             signal_observation_id=observation_id, experiment_version_id=version.id,
-        ))
+        )
+        if created_at is not None:
+            run.created_at = created_at
+        self.session.add(run)
         self.session.flush()
-        return True
+        return run.id
 
     def ensure_quote_source(self) -> UUID:
         with self.session.begin():
@@ -240,6 +258,8 @@ class TrackingService:
         if quoted_at < origin:
             return
         rules = self.session.scalar(select(ExperimentVersion.rules).where(ExperimentVersion.id == run.experiment_version_id))
+        if reference_after_decision(rules) and quoted_at < run.created_at:
+            return
         try:
             expires_at = window_close(self.session, quoted_at, int(rules["window_sessions"]))
         except CalendarUnavailable as error:
@@ -288,7 +308,7 @@ class TrackingService:
             run.status = "completed"
 
     def _lock(self, key: str) -> None:
-        self.session.execute(select(func.pg_advisory_xact_lock(func.hashtextextended(key, 0))))
+        advisory_lock(self.session, key)
 
     def _run_rows(self, request: TrackingRunQuery | None = None, select_run_id: UUID | None = None) -> list[TrackingRunOutput]:
         levels = (

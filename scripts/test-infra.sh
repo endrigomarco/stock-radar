@@ -43,6 +43,7 @@ compose run --rm --no-deps --entrypoint python migrations -m stock_radar.db.prov
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_api.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_workflows.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_collection_rules.py
+compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_selection.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_transport.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" --volume "$(pwd)/plugin:/plugin:ro" tests /checks/check_bridge.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_webhooks.py

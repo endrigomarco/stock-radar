@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from stock_radar.app import create_app
 from stock_radar.db.config import database_url
-from stock_radar.db.models import CollectionRun, Instrument, PriceQuote, SignalObservation, Source, TrackingRun, TriggerEvent, TriggerLevel
+from stock_radar.db.models import CollectionRun, ExperimentVersion, Instrument, PriceQuote, SignalObservation, Source, TrackingRun, TriggerEvent, TriggerLevel
 from stock_radar.market_calendar import window_close
 from stock_radar.services.reports import ReportService
 from stock_radar.services.tracking import TrackingService
@@ -32,7 +32,8 @@ def at(day: int, hour: int, minute: int = 0, month: int = 10) -> datetime:
 class Scenario:
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.version = TrackingService(session).current_version()
+        current = TrackingService(session).current_version()
+        self.version = session.scalar(select(ExperimentVersion).where(ExperimentVersion.experiment_id == current.experiment_id, ExperimentVersion.version == 1))
         self.tradingview = self._source("tradingview", "TradingView")
         self.brapi = self._source("brapi", "brapi")
         self.instruments: dict[str, Instrument] = {}

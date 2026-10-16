@@ -1,0 +1,109 @@
+{
+  "client_selection_id": "00000000-0000-4000-8000-000000000101",
+  "market_session_date": "2026-01-05",
+  "criteria_version": "selection-v1",
+  "ranking_basis": "full",
+  "summary": "Synthetic example: three candidates selected, one outranked by sector composition, one excluded by a documented corporate event.",
+  "no_selection_reason": null,
+  "plugin_version": "0.8.0",
+  "decisions": [
+    {
+      "decision_id": "00000000-0000-4000-8000-000000000201",
+      "outcome": "selected",
+      "reason_code": null,
+      "rank": 1,
+      "rationale": "Synthetic: drop in line with its sector; no company specific negative fact found.",
+      "event_date": null,
+      "evidence": [
+        {
+          "kind": "sector_move",
+          "publisher": "Synthetic news outlet",
+          "origin": null,
+          "url": "https://example.invalid/sector-move",
+          "title": "Synthetic sector move",
+          "published_at": "2026-01-05T12:50:00Z",
+          "consulted_at": "2026-01-05T14:10:00Z",
+          "summary": "Synthetic text describing a sector wide decline.",
+          "stance": "neutral"
+        }
+      ],
+      "unavailable": [
+        "recommendation_details"
+      ],
+      "risks": [
+        {
+          "code": "upcoming_results",
+          "text": "Synthetic: results expected within the coming weeks."
+        }
+      ]
+    },
+    {
+      "decision_id": "00000000-0000-4000-8000-000000000202",
+      "outcome": "selected",
+      "reason_code": null,
+      "rank": 2,
+      "rationale": "Synthetic: cause of the drop not found, which is neutral; second in the baseline order.",
+      "event_date": null,
+      "evidence": [],
+      "unavailable": [
+        "drop_cause",
+        "upcoming_events"
+      ],
+      "risks": []
+    },
+    {
+      "decision_id": "00000000-0000-4000-8000-000000000203",
+      "outcome": "selected",
+      "reason_code": null,
+      "rank": 3,
+      "rationale": "Synthetic: third in the order; sector not yet selected.",
+      "event_date": null,
+      "evidence": [],
+      "unavailable": [
+        "drop_cause"
+      ],
+      "risks": []
+    },
+    {
+      "decision_id": "00000000-0000-4000-8000-000000000204",
+      "outcome": "not_selected",
+      "reason_code": "price_comparison_invalid",
+      "rank": null,
+      "rationale": "Synthetic: reverse split with an ex-date within the 20 sessions after the decision; the actual tracking window is not known at decision time.",
+      "event_date": "2026-01-12",
+      "evidence": [
+        {
+          "kind": "corporate_event",
+          "publisher": "Synthetic company notice",
+          "origin": null,
+          "url": "https://example.invalid/notice",
+          "title": "Synthetic reverse split notice",
+          "published_at": "2025-12-20T21:00:00Z",
+          "consulted_at": "2026-01-05T14:20:00Z",
+          "summary": "Synthetic notice announcing a reverse split.",
+          "stance": "unfavorable"
+        }
+      ],
+      "unavailable": [],
+      "risks": [
+        {
+          "code": "corporate_event",
+          "text": "Synthetic: reverse split."
+        }
+      ]
+    },
+    {
+      "decision_id": "00000000-0000-4000-8000-000000000205",
+      "outcome": "not_selected",
+      "reason_code": "outranked",
+      "rank": 4,
+      "rationale": "Synthetic: comparable to rank 3 but in a sector already selected.",
+      "event_date": null,
+      "evidence": [],
+      "unavailable": [
+        "drop_cause"
+      ],
+      "risks": []
+    }
+  ]
+}

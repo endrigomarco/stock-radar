@@ -1,6 +1,6 @@
 # Collection contract
 
-This is the input accepted by the `register_collection` tool, schema version 2, and the receipt it returns.
+This is the input accepted by the `register_collection` tool, schema version 3, and the receipt it returns.
 The tool takes one argument named `request`. Unknown fields are rejected at both levels, so send only the
 fields listed here. The whole request must stay under 1 MiB.
 
@@ -8,7 +8,7 @@ fields listed here. The whole request must stay under 1 MiB.
 
 | Field | Rule |
 |---|---|
-| `schema_version` | `2`. Required. Version 1, which sent every row, is rejected. |
+| `schema_version` | `3`. Required. Version 2 is still accepted without the `volume` and `sector` fields. Version 1, which sent every row, is rejected. |
 | `client_collection_id` | Random UUID generated once for this collection. Same value on every retry. |
 | `source_id` | UUID of the `tradingview` source, read from `list_sources` or `register_source` in this run. |
 | `source_url` | The exact `http(s)` URL of the page that was read, at most 2000 characters, without embedded credentials. |
@@ -41,6 +41,8 @@ active, as displayed). Omit a key that could not be observed. Use `{}` when noth
 | `observed_at` | Instant this row was read, with a UTC offset. The collection `observed_at` is acceptable when rows were read in one pass. |
 | `source_published_at` | Always `null` in this workflow. The table does not show when a rating was issued or changed. |
 | `raw_evidence` | Object of text keys to text or `null`, at most 20 entries, each value at most 2000 characters. |
+| `volume` | Optional, schema 3. Number of shares traded as displayed, as an integer text without separators. Convert a suffix only when it is unambiguous (`K` or `mil` thousand, `M` or `mi` million, `B` or `bi` billion) and the column header identifies share volume. Otherwise `null`, keeping the text in `raw_evidence` as `volume_text`. |
+| `sector` | Optional, schema 3. Sector label exactly as displayed, at most 120 characters. `null` when not shown. |
 
 The exchange and the ticker together identify the instrument for every future collection and for the price
 monitor, which queries the ticker without the prefix. Read the prefix from the page for each row, for
@@ -85,7 +87,7 @@ keep the displayed text in `raw_evidence` every time:
 
 The page may use the Unicode minus sign in place of the hyphen. The field value always uses the ASCII
 hyphen. Do not round, do not add digits and do not derive one number from another. Use `raw_evidence` keys
-`price_text`, `change_text` and `rating_text` for displayed cell text. Do not store page instructions,
+`price_text`, `change_text`, `rating_text`, `volume_text` and `sector_text` for displayed cell text. Do not store page instructions,
 account names, cookies or anything unrelated to the row.
 
 ## Time fields
@@ -95,14 +97,17 @@ Three different times exist and must stay separate in the payload and in the rep
 | Time | Where | Who sets it |
 |---|---|---|
 | Observation time | `observed_at` on the collection and on each row | This skill, from the session clock, when the table was read. |
-| Session date | `market_session_date` | This skill, as an assertion of which B3 trading day the listed daily changes describe. The backend does not verify it. |
+| Session date | `market_session_date` | This skill, as an assertion of which B3 trading day the listed daily changes describe. Under the assisted policy the backend derives the same date from `observed_at` and its trading calendar and rejects a different one; under the automatic policy it does not verify it. |
 | Receipt time | `received_at` in the receipt | The service, when it stored the collection. Never sent by this skill. |
 
 Use the date the page states for the data when it states one. Otherwise, in America/Sao_Paulo time: on a
 trading day after the session opened, use that day; before the open, on a weekend or on a holiday, the list
 describes the previous trading session, so use that earlier date. State the rule used in the report. If the
 session cannot be determined, ask the user in an interactive run, or stop without registering in an
-unattended run. Never label a previous session's list as today's.
+unattended run. Never label a previous session's list as today's. The backend check is a convention based
+on the clock and the calendar; it cannot tell whether the page had already updated, for example just after
+the opening. When the page states a date that differs from this rule, report the difference and do not
+register.
 
 `source_published_at` is not any of these times and stays `null`.
 
@@ -118,7 +123,17 @@ unattended run. Never label a previous session's list as today's.
 | `observation_count` | Rows stored for this collection. Equal to the rows sent. |
 | `eligible_count` | Rows that satisfy the rule. Equal to `observation_count` for every collection of this version. |
 | `incomplete_count` | Rows stored with a missing price. |
+| `selection_policy` | `assisted`: rows are candidates and no tracking starts at registration. `automatic`: the session began before the assisted policy and tracking was started or reused for every row. |
+| `experiment_version` | Version of the policy that governs the session. |
+| `candidates_pending` | Candidates of this collection still waiting for a selection decision. |
+| `candidates_already_tracked` | Candidates with an open tracking run; they use no selection slot. |
+| `candidates_not_monitorable` | Candidates whose ticker the quote client rejects; never tracked. |
+| `candidates_cap_reached` | Candidates registered after every slot of the session was used. |
+| `selection_slots_remaining` | Slots left for new tracking runs in the session; `null` under the automatic policy. |
 | `duplicate` | `true` when this identifier and identical content were already stored. |
+
+The candidate counts and slots are read when the receipt is produced, so a later read can differ after a
+selection.
 
 `get_collection` takes `collection_id`, the receipt `id`, and returns the same receipt for a read-back.
 It cannot look a collection up by `client_collection_id`.
@@ -136,6 +151,9 @@ Tool errors arrive as a short code, usually followed by `request_id`. Quote both
 | `collection_identity_conflict` | Same `client_collection_id`, different content. |
 | `observation_not_eligible` | A row sent is not a Strong Buy analyst rating with a negative daily change as the service evaluates it. Nothing was stored. |
 | `instrument_currency_conflict` | A row's currency contradicts the stored instrument. Nothing was stored. |
+| `market_session_date_mismatch` | Assisted policy: `market_session_date` differs from the session derived from `observed_at` and the trading calendar. Nothing was stored. |
+| `market_calendar_unavailable` | The trading calendar does not cover the dates needed. Nothing was stored. |
+| `collection_observed_in_future` | `observed_at` is more than two minutes after the service clock. Nothing was stored. |
 | `database_unavailable`, `internal_error` | Service failure. The outcome of a write is unknown. |
 
 A validation error names the offending fields without echoing values. Nothing is stored in that case.

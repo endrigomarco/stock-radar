@@ -5,11 +5,13 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.7.1, prepared on 2026-10-13 for Claude Cowork on the MacBook Pro.
+Version 0.8.0, prepared on 2026-10-15 for Claude Cowork on the MacBook Pro. It adds the `select-candidates`
+skill and adapts the others to assisted candidate selection. It was validated with `claude plugin validate`
+and packaged locally; it was not installed.
 
 | State | Scope |
 |---|---|
-| Implemented | Manifest with one local MCP server, the Python bridge in `plugin/mcp/`, five skills with their references, `make package` |
+| Implemented | Manifest with one local MCP server, the Python bridge in `plugin/mcp/`, six skills with their references, `make package` |
 | Tested with synthetic data | The bridge over stdio against a synthetic MCP server: discovery, successful calls, tool errors, refused token, closed port, redirect to another origin, clean diagnostics; in Docker and natively on macOS with Python 3.13 |
 | Tested by the owner | Reported on 2026-10-09: version 0.2.1 installed in Cowork with its four skills, and `check-status` reported the MCP tools as absent; from a terminal on the MacBook Pro an authenticated `initialize` to the VPS endpoint over Tailscale returned 200 |
 | Not validated | Cowork starting the bridge, tool discovery and any tool call from Cowork, the Keychain read on the MacBook, Python 3.10 to 3.12, Chrome reading of the real table, scheduling |
@@ -24,14 +26,17 @@ VPS. The MacBook needs Python and the bridge dependencies only; no Docker, Node.
 
 | Skill | Role | Tools it expects |
 |---|---|---|
-| collect-signals | Examine the whole list and register only Strong Buy analyst rows with a negative daily change | `service_status`, `list_sources`, `register_source`, `register_collection`, `get_collection` |
+| collect-signals | Examine the whole list and register only Strong Buy analyst rows with a negative daily change, as candidates | `service_status`, `list_sources`, `register_source`, `register_collection`, `get_collection` |
+| select-candidates | Research the pending candidates of a session, rank them and confirm at most the remaining slots, with justifications | `service_status`, `list_selection_candidates`, `confirm_selection` |
 | check-status | Read service, receipts, quality counts and tracking state | `service_status`, `data_quality_report`, `get_collection`, tracking list tools |
 | analyze-results | Describe stored signals, runs and hits | `list_signals`, tracking list tools |
 | daily-report | Present the service's daily report without computing anything | `service_status`, `daily_report` |
 | prepare-triggers | Read tracking runs; cancel one on explicit request | `list_tracking_runs`, `cancel_tracking_run` |
 
-The backend creates or reuses tracking runs when an eligible observation is registered, and the monitor on
-the server sets references and records hits. No skill prepares levels, supplies a reference or creates
+Under the assisted policy the backend stores every eligible observation as a candidate and creates tracking
+runs only for the candidates that `select-candidates` confirms, at most three new ones per session; an open
+run is reused. Sessions that began under the earlier policy still create or reuse runs at registration. The
+monitor on the server sets references, never quoted before the decision, and records hits. No skill prepares levels, supplies a reference or creates
 provider alerts. `prepare-triggers` prepares nothing: it reads tracking runs and is the only skill that may
 call `cancel_tracking_run`, on explicit request; removing it is a pending decision. There are no computed performance metrics, so `analyze-results`
 is limited to the list tools.
@@ -107,8 +112,11 @@ The service must list the Host that the bridge presents in `MCP_ALLOWED_HOSTS`; 
 The bridge sends no Origin header.
 
 Because the token is read once at start, a changed Keychain item takes effect after the Claude desktop app
-is restarted. Only the reader token is used in this step. With it the service refuses every write with
-`forbidden`, so no source, collection or cancellation can be registered in production through the bridge.
+is restarted. The documented setup stores a reader token under the account `reader`; with a reader token the
+service refuses writes with `forbidden`. The account name does not establish which token is actually stored
+or what it may do, and the installed configuration has not been inspected from this repository; the owner
+reported using the service successfully. Registering a collection and confirming a selection both need the
+collector permission.
 
 ### First real test on the MacBook Pro
 
@@ -118,7 +126,7 @@ Steps run by the owner. Record the real results in [testing](testing.md).
    the dedicated environment, the Keychain item created with the prompting form of `security`, and the
    terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
 2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
-   `stock-radar-0.7.1.zip`, then quit and reopen the app.
+   `stock-radar-0.8.0.zip`, then quit and reopen the app.
 3. In a new Cowork task ask for a real call of `service_status`.
 
 | Outcome | Criterion |
@@ -211,3 +219,6 @@ background. Do not label a previous session's list as today's.
 6. Exercise the access pause by starting signed out, then replying `logado`.
 7. Resolve the TradingView usage conditions recorded in [integrations](integrations.md) before unattended use.
 8. Create the daily scheduled task and observe where it runs and what happens when the Mac is asleep.
+9. Run `collect-signals` and `select-candidates` interactively once with an authorized test service:
+   confirm whether the table shows volume and sector columns, the unit of the volume column, that research
+   pages can be opened, and that a late or interrupted selection is reported as such.
