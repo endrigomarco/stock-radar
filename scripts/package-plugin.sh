@@ -9,6 +9,15 @@ case "$version" in
         exit 1
         ;;
 esac
+description_limit=500
+description_length=$(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1], encoding="utf-8"))["description"]))' "$manifest") || {
+    echo "Could not read the description from $manifest." >&2
+    exit 1
+}
+if [ "$description_length" -gt "$description_limit" ]; then
+    echo "The manifest description has $description_length characters; Cowork accepts at most $description_limit. No archive was written." >&2
+    exit 1
+fi
 archive="dist/stock-radar-$version.zip"
 file_list=$(mktemp)
 trap 'rm -f "$file_list"' EXIT

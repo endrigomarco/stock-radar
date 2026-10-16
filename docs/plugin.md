@@ -61,11 +61,19 @@ Format checked against the official documentation on 2026-10-09:
   at the archive root or inside a single top-level folder. Limits are 200 MB and 5,000 files.
 - A top-level `bin/` directory blocks installation in Cowork. `${user_config.*}` values are not prompted
   for in Cowork. Neither is used.
+- Observed on 2026-10-16: the Cowork upload rejected the first `stock-radar-0.8.0.zip` with "Plugin
+  description must be at most 500 characters"; its manifest description had 580. `claude plugin validate`
+  had accepted it, so passing local validation does not prove that Cowork accepts the upload. Keep the
+  `description` field at 500 characters or fewer. The 0.8.0 archive was rebuilt with a shorter description
+  and the same version.
 
 Build the archive from the repository root with `make package`, which runs `scripts/package-plugin.sh`.
 It reads the version from the manifest, deletes any archive of that version and writes a new
 `dist/stock-radar-<version>.zip` from scratch, then lists its contents. It needs no `.env`, Docker or
-running service. Only files under `plugin/` that Git tracks or would track are included, so anything matched
+running service; it uses the host `python3` to read the manifest. Before touching `dist/` it stops with
+the length found when the manifest `description` exceeds 500 characters, so an existing archive is kept.
+That is the only Cowork upload rule it checks: passing it, like passing `claude plugin validate`, does not
+mean Cowork accepts the upload. Only files under `plugin/` that Git tracks or would track are included, so anything matched
 by `.gitignore`, such as `.env` files, keys and `.DS_Store`, is left out. `dist/` is ignored by Git, so the
 archive is always built locally and never pulled.
 
