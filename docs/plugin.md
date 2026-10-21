@@ -5,8 +5,11 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.8.0, prepared on 2026-10-15 for Claude Cowork on the MacBook Pro. It adds the `select-candidates`
-skill and adapts the others to assisted candidate selection. It was validated with `claude plugin validate`
+Version 0.9.0, prepared on 2026-10-20 for Claude Cowork on the MacBook Pro. The `daily-report` skill now
+opens with the simulated portfolio of each collection date, read from the extended `daily_report` tool, and
+keeps the technical report on request; it calls only `service_status` and `daily_report`, as before, so a
+scheduled task limited to those two tools needs no change. Version 0.8.0 added the `select-candidates` skill
+and adapted the others to assisted candidate selection. 0.9.0 was validated with `claude plugin validate`
 and packaged locally; it was not installed.
 
 | State | Scope |
@@ -30,7 +33,7 @@ VPS. The MacBook needs Python and the bridge dependencies only; no Docker, Node.
 | select-candidates | Research the pending candidates of a session, rank them and confirm at most the remaining slots, with justifications | `service_status`, `list_selection_candidates`, `confirm_selection` |
 | check-status | Read service, receipts, quality counts and tracking state | `service_status`, `data_quality_report`, `get_collection`, tracking list tools |
 | analyze-results | Describe stored signals, runs and hits | `list_signals`, tracking list tools |
-| daily-report | Present the service's daily report without computing anything | `service_status`, `daily_report` |
+| daily-report | Present the service's simulated portfolios first and the technical report on request, without computing anything | `service_status`, `daily_report` |
 | prepare-triggers | Read tracking runs; cancel one on explicit request | `list_tracking_runs`, `cancel_tracking_run` |
 
 Under the assisted policy the backend stores every eligible observation as a candidate and creates tracking
@@ -134,7 +137,7 @@ Steps run by the owner. Record the real results in [testing](testing.md).
    the dedicated environment, the Keychain item created with the prompting form of `security`, and the
    terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
 2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
-   `stock-radar-0.8.0.zip`, then quit and reopen the app.
+   `stock-radar-0.9.0.zip`, then quit and reopen the app.
 3. In a new Cowork task ask for a real call of `service_status`.
 
 | Outcome | Criterion |

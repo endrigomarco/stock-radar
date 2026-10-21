@@ -85,6 +85,107 @@ Candidates not selected are not tracked. Storing them makes the choice auditable
 their later prices, so no comparison between selected and discarded candidates is possible. Do not adjust
 the criteria after seeing results; a change of criteria needs a new version.
 
+## Simulated portfolios
+
+Implemented in the daily report as `simulation_version` `exit-v1` and validated with synthetic data only.
+The question it answers: had 100,000.00 been invested in the stocks of each collection date with fixed exit
+triggers, which positions would have left, when the evidence was recorded and what the result would be. It is
+a theoretical exercise rebuilt on every read from stored records; nothing is persisted, no order exists and
+neither exit price proves an execution. Brokerage, taxes, dividends, execution modelling and corporate action
+adjustments are excluded. Quotes are polled about every 30 minutes; this is not real time.
+
+**Participants and capital.** Each collection date is an independent portfolio of 100,000.00. Under the
+assisted policy only `selected` decisions take part; pending, not selected, not assessable and already tracked
+candidates do not. Under the automatic policy the runs created from that date's observations take part;
+reused runs are not counted again. The capital is split equally, truncated to the cent; the residual cents
+stay in cash. The share of a participant without an entry stays in cash and is never redistributed.
+
+**Composition frozen at the first entry.** At a cut, decisions decided up to the cut are ordered by decision
+time (the run creation time under the automatic policy); decisions with the same time are treated as one
+group. A group joins while its decision time is earlier than the first entry so far, the smallest market
+time of a known reference among the members already included; a group decided at or after it is listed as
+outside the portfolio, with no capital and no reallocation. A reference is known only when its quote was
+quoted and received by the cut. The composition is `final` when a first entry is known and no reference that
+is still unknown could exclude an included group: every group that follows a member without a known
+reference was decided at least `MAX_QUOTE_AGE` (60 minutes, the service's quote age limit) before the cut.
+A reference recorded on the run whose quote cannot be found, by the quote id in its evidence or by instrument,
+source and market time, has no known receipt time and none is substituted: it never counts as a known first
+entry, and any group decided at or after its market time keeps the composition provisional.
+Otherwise it is `provisional` and every amount of the date is labelled provisional. A final composition does
+not change with later receipts. Example, with confirmations on 14 October 18:05 for AAAA3 and CCCC3 and on 15
+October 10:45 for BBBB4, AAAA3 quoted at 10:30 and received at 11:05, CCCC3 quoted at 10:20 and received at
+11:15: at 10:50 no reference is known and the composition is provisional with the three; at 11:10 the first
+entry is 10:30, BBBB4 is outside and the composition is final, because the only included group was decided
+the day before; at 11:20 it is unchanged.
+
+**Strategies.** A exits at +1% or -3%, B at +2% or -5%, C at +3% or -6%; HOLD never exits early. Each
+strategy is independent. Thresholds are `reference * (1 + percent / 100)`; a quote reaches a target when its
+price is greater than or equal to it and a stop when it is less than or equal to it, using only quotes with a
+market time after the reference. The first reached trigger closes the position for that strategy; the
+realized result stays fixed and the proceeds stay in cash, with no reinvestment or reentry. Two exit prices
+are reported: the trigger price (idealized, the main result) and the first recorded quote that reached it.
+Every trigger shows the quote's market time and the time the service received it.
+
+**Precision.** Calculations run in a local Decimal context of 34 significant digits. A position value is
+`allocation * price / reference`, rounded half up to the cent; the displayed quantity is rounded to eight
+decimals for display and never used. Totals are sums of rounded components: cash is the residual plus pending
+shares plus exit values, equity is cash plus open values, the result is equity minus 100,000.00 and equals
+realized plus unrealized; the service checks these identities and fails the request if they diverge.
+
+**Proven observation horizon.** A price quote belongs to the instrument and source, not to a run, and the
+monitor can record a quote after a run was cancelled during the provider call. A run therefore uses only
+quotes of its reference source with market and receipt times up to the cut, market time after the reference,
+up to its expiry and before the reference of a later run of the same instrument, and only up to its horizon:
+
+| Run | Horizon |
+|---|---|
+| Active or expired | The cut or the window close. The final status proves it was never cancelled |
+| Completed | The market time of the quote at which the recorded quotes reached all six levels, or of the latest of the six quote linked hits, whichever is earlier. Before that the run is open at the cut |
+| Cancelled, completed with a webhook hit, or overlapping a later run | The latest market time among the run's hits linked to a quote and received by the cut, otherwise the reference. Such a hit exists only if the run was open when that quote was processed, and quotes are processed in market time order |
+
+Webhook hits never prove that a run was open. No cancellation time is inferred. An exit on a quote inside the
+horizon is kept even if the run was cancelled later; a strategy without an exit inside a horizon that ended
+early is `unproven` (or `observation_ended` after completion) with its last proven valuation and date. A
+window that closed without an exit is `window_closed`, valued at the last quote up to the expiry, not a sale.
+Runs without a known reference, waiting or cancelled before entry, are `pending_entry` with their share in
+cash, never a zero return. A participant whose reference has no known receipt time is neither pending nor
+entered: every strategy is `unproven` with no value, its share counts as affected capital instead of cash, the
+totals are incomplete and `reference_receipt_unknown` is listed.
+
+**Coverage and completeness.** Each strategy is checked over its own interval, from the reference to its exit
+or to its horizon: a session without a recorded quote marks minimum coverage as missing for that strategy
+only, so a gap after an exit does not affect that exit. The result is still computed on the recorded quotes.
+When any position of a strategy is `unproven` or `observation_ended`, its equity and result are not
+determinable: the report gives the known components and the affected capital, never a subtotal as equity.
+Equity by session is not computed as of the report cut. Each point uses only what was available at its own
+instant `valued_at`, the session close or the cut if earlier: a reference, an exit or a quote counts only when
+both its market time and its receipt time are at or before that instant. A quote quoted before the close and
+received after it is used from the next point on; until then the position is pending, or valued at the last
+earlier available quote of that session that precedes the exit quote. An exit, once available at a point,
+keeps its result at every later point. A session where an open position has no available quote, or after a
+position's observation ended, or with a reference of unknown receipt time, has no value.
+
+**Corporate actions.** There is no adjustment data. A large price move is shown as observed and never excluded
+for its size. Risks recorded at selection (`corporate_event`, `ex_dividend`) are listed for information; an
+explicit invalid comparison is never selected under the current rules.
+
+**Example**, generated by the synthetic fixture in `tests/check_portfolio.py`: three participants with
+33,333.33 each and 0.01 in cash; AAAA3 entered at 10.00 and later quoted 10.14, 10.22 and 10.25; BBBB4 entered
+at 20.00 and was quoted 19.10 and 19.30; CCCC3 is waiting for entry.
+
+| Strategy (trigger price) | Realized | Unrealized | Cash | Open | Equity | Result |
+|---|---|---|---|---|---|---|
+| A +1%/-3% | -666.67 | 0.00 | 99,333.33 | 0.00 | 99,333.33 | -666.67 (-0.67%) |
+| B +2%/-5% | 666.67 | -1,166.67 | 67,333.34 | 32,166.66 | 99,500.00 | -500.00 (-0.50%) |
+| C +3%/-6% | 0.00 | -333.34 | 33,333.34 | 66,333.32 | 99,666.66 | -333.34 (-0.33%) |
+| HOLD | 0.00 | -333.34 | 33,333.34 | 66,333.32 | 99,666.66 | -333.34 (-0.33%) |
+
+At the first recorded quote: A -1,033.33 (-1.03%), B -433.34 (-0.43%), C and HOLD unchanged.
+
+Historical limits: runs completed before this version stop being observed at completion, so HOLD is truncated
+there; cancelled runs without a later quote linked hit stay unproven from that hit or the reference; the last
+minutes of each session are not polled.
+
 ## Earlier proposals for manual alerts
 
 The following text predates the polling pilot and applies only to a possible manual-alert variant. Collection

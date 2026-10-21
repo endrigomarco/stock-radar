@@ -53,14 +53,24 @@ three new tracking runs per session through `confirm_selection`, with justificat
 information recorded per candidate. The service enforces the limit under concurrency and retries, reuses
 open runs, never takes a reference quoted before the decision and keeps late selections apart in reports.
 Experiment version 2 is seeded by revision `e7c4b2a9d1f6` and governs only sessions whose first collection
-is registered under it. Pending: applying the revision to a persistent database, installing plugin 0.8.0,
+is registered under it. Pending: applying the revision to a persistent database, installing plugin 0.9.0,
 the first interactive run, and the observation of the real table columns. Monitoring discarded candidates,
 historical price sources and a liquidity floor by position size are out of scope.
+
+## 3c. Simulated portfolios (implemented locally, synthetic validation only)
+
+The daily report carries, per collection date, a 100,000 BRL portfolio of the selected stocks (or the runs
+started by that date under the earlier policy) under exit strategies A, B and C and holding, rebuilt from
+recorded quotes with both exit prices, a proven observation horizon per run and a composition frozen at the
+first entry; see [experiment](experiment.md#simulated-portfolios). No migration or monitoring change.
+Pending: deploying the service and installing plugin 0.9.0. Deferred: a public `as_of`, continued polling
+after completion for holding (a new experiment version), a cancellation timestamp, costs, taxes, dividends
+and corporate action adjustments.
 
 ## 4. MCP and plugin connection
 
 The local read tools and authorized ingestion path exist. The plugin package for collection is prepared
-(version 0.8.0) with a bundled Python bridge from stdio to the service's MCP endpoint over the private
+(version 0.9.0) with a bundled Python bridge from stdio to the service's MCP endpoint over the private
 network. Installation and skill discovery in Cowork were confirmed by the owner for 0.2.1. The backend and
 PostgreSQL belong on the VPS. The bridge passed synthetic checks; whether Cowork starts it is not yet
 validated; see [plugin](plugin.md). Connect the plugin to an authorized test service.

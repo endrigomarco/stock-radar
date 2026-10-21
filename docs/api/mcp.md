@@ -16,7 +16,7 @@ The server version is `0.1.0`. This is a local implementation, not an installed 
 | list_tracking_runs | Read | `query`: status/instrument filter object |
 | list_latest_quotes | Read | `query`: instrument filter object |
 | list_trigger_events | Read | `query`: tracking run/instrument filter object |
-| daily_report | Read | `query`: collection date page and signal page object, use `{}` for the ten most recent dates |
+| daily_report | Read | `query`: collection date page and signal page object, use `{}` for the ten most recent dates; each date also carries the simulated `portfolio` on its first row page |
 | list_selection_candidates | Read | `query`: optional `market_session_date`, use `{}` for the latest assisted session |
 | confirm_selection | Collector | `request`: selection envelope with one decision per pending candidate |
 | cancel_tracking_run | Collector | `tracking_run_id`: UUID |

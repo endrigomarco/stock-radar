@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from stock_radar.viewmodels.portfolio import PortfolioOutput
+
 TrackingLink = Literal["own", "reused_confirmed", "unconfirmed", "already_tracked", "selection_pending", "not_selected", "not_assessable"]
 SelectionOutcome = Literal["pending", "selected", "not_selected", "not_assessable", "already_tracked"]
 MilestoneState = Literal["future", "in_progress", "final", "no_data", "out_of_window", "not_available", "calendar_unavailable"]
@@ -148,6 +150,7 @@ class CollectionGroup(BaseModel):
     signal_limit: int
     signal_offset: int
     signals_has_more: bool
+    portfolio: PortfolioOutput | None = None
 
 
 class DailyReport(BaseModel):
@@ -155,6 +158,10 @@ class DailyReport(BaseModel):
     reference_session: str = "D+0 is the session of reference_at; D+N is the Nth following session of trading_days"
     coverage_rule: str = "minimum_daily_quote: at least one accepted quote per required session; not complete coverage"
     quote_semantics: str = "periodic polled quotes; never a closing, highest or lowest price"
+    portfolio_semantics: str = (
+        "simulated portfolios of 100000.00 per collection date, rebuilt from quotes recorded about every 30 minutes; not real time; "
+        "no orders, costs, taxes, dividends, execution modelling or corporate action adjustments; neither exit price proves an execution"
+    )
     items: list[CollectionGroup]
     limit: int
     offset: int

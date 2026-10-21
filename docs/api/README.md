@@ -16,7 +16,7 @@
 | GET /v1/webhook-receipts/{receipt_id} | Webhook processing status | Read |
 | POST /webhooks/tradingview | Durable webhook receipt | Dedicated webhook credential |
 | GET /v1/data-quality | Bounded collection and observation quality counts | Read |
-| GET /v1/reports/daily | Daily report by collection date: signal progress and target hit rates | Read |
+| GET /v1/reports/daily | Daily report by collection date: simulated portfolio, signal progress and target hit rates | Read |
 | GET /v1/selection/candidates | Candidates of one assisted selection session with decisions, slots and baseline order | Read |
 | POST /v1/selections | Confirm atomically the decisions for every pending candidate of one session | Collector |
 
@@ -256,7 +256,8 @@ Use these identifiers with `make errors ID=...`. See [observability](../observab
 
 `GET /v1/reports/daily` and the MCP tool `daily_report` call the same read-only service. The report always
 describes the current state: it runs in one repeatable-read transaction, returns `generated_at` and uses
-only quotes and events recorded up to that instant. There is no historical `as_of`. Pages requested at
+only quotes and events recorded up to that instant. There is no historical `as_of`; the portfolio engine
+accepts a cut internally and is tested with past cuts, but the interface always uses `generated_at`. Pages requested at
 different moments are not one snapshot.
 
 Query: `limit` collection dates (default 10, at most 30) and `offset`, newest first; optional
@@ -318,3 +319,39 @@ Rules, all computed by the service:
 
 Not available: D+20, quotes after completion, expiry or cancellation, the time of a cancellation, a report
 as of a past instant, and a link between a signal and a run that was cancelled or never admitted.
+
+### Simulated portfolio
+
+Each date carries an optional `portfolio` object, computed in the same transaction with `generated_at` as the
+cut. It is filled on the first row page of a date (`signal_offset` 0) and null on later pages. The top level
+`portfolio_semantics` states its limits. The capability `portfolio_simulation` in `/v1/status` announces it;
+older consumers can ignore the field. Rules are in [experiment](../experiment.md#simulated-portfolios).
+
+- `cut_at`, `simulation_version` (`exit-v1`), `initial_capital` (100000.00), `provisional` and
+  `latest_quote` (symbol, price, `quoted_at`, `received_at`) of the participants, among quotes with a known
+  receipt time.
+- `composition`: `status` (`empty`, `provisional`, `final`), `first_entry_at`, `participants`,
+  `outside_portfolio`, `allocation_per_participant` and `rounding_residual`.
+- `strategies`: `A`, `B`, `C` and `HOLD` with `target_percent` and `stop_percent`, each with a
+  `trigger_price` block (exit at the trigger price) and a `first_quote` block (exit at the first recorded
+  quote that reached it). A block has the counts `exits_target`, `exits_stop`, `open`, `window_closed`,
+  `pending_entry`, `observation_ended` and `unproven`; the amounts `realized`, `unrealized`, `cash` and
+  `open_value`; `complete`; `equity`, `result` and `result_percent`, null when `complete` is false;
+  `affected_capital` and `affected_positions`; `minimum_coverage_missing_capital` and
+  `minimum_coverage_missing_positions`.
+- `triggers`: symbol, strategy, `exit_kind`, `trigger_percent`, `trigger_price`, the crossing quote with
+  market time and receipt time, and the result under both prices.
+- `positions`: participants and stocks confirmed after the first entry (`outside_portfolio`, no capital),
+  with `decided_at`, `selection_late`, `recorded_risks`, `allocation`, `display_quantity` (display only),
+  `entry` (price, `quoted_at` and `received_at`; `received_at` is null when the reference quote cannot be
+  found, and no other time is substituted), `pending_reason`, `observation_end`, `observed_until`, `window_ends_at` and one entry per strategy
+  with `state`, trigger, exit quote or last valuation, values and results under both prices,
+  `minimum_coverage` and `sessions_without_quote`.
+- `equity_by_session`: per session from the first entry to the cut or the last window end, its `state`,
+  `valued_at` and, per strategy, the equity under both prices, null with `positions_without_quote` or
+  `positions_unobserved` when it cannot be determined. Each point uses only references, exits and quotes
+  quoted and received by its `valued_at`, not by `cut_at`, so a quote received after a close first counts at
+  the next point.
+- `limitations`: codes for the conditions present in that portfolio.
+
+Amounts are Decimal strings rounded to cents. Prices are Decimal strings with eight decimals.

@@ -3,7 +3,7 @@
 ## Current stage
 
 `make test` runs infrastructure, schema and API checks, with standard-library assertions, FastAPI
-TestClient and real PostgreSQL. Collection services and local MCP tools are implemented; financial analysis and live-provider workflows are pending. It runs the infrastructure smoke
+TestClient and real PostgreSQL. Collection services, local MCP tools and the simulated portfolios of the daily report are implemented; live-provider workflows are pending. It runs the infrastructure smoke
 check described below. Validate Markdown links, manifest JSON,
 skill frontmatter, package-contained references and whitespace. If available, use Claude's plugin manifest
 validator, but distinguish it from installation or execution in Cowork. Do not describe these checks as
@@ -442,3 +442,56 @@ synthetic plugin examples validate against the service contracts.
 Not validated: the migration on any persistent database or on the VPS, the plugin in Cowork, the real
 TradingView volume and sector columns and their units, research pages opened by Cowork, the credential
 installed in the bridge, and any scheduled run. No provider, market page or production service was called.
+
+## Simulated portfolios
+
+`tests/check_portfolio.py` is part of `make test`, after the report check. It first runs pure checks of the
+Decimal simulation and the composition rule, then builds synthetic August 2026 scenarios through the real
+`apply_quote` and `cancel` service methods and reads them through the report service with fixed cuts, then
+through REST and MCP with the reader token. It pins experiment versions 1 and 2 by number because the
+monitoring check adds a version 3.
+
+Checked:
+
+- the documented example in [experiment](experiment.md#simulated-portfolios) is computed by the fixture and
+  asserted value by value;
+- first trigger per strategy with independent A, B and C on one path, a jump beyond the trigger with the
+  trigger price and the first recorded quote differing, and an exit unchanged after later extreme quotes;
+- coverage per strategy interval: a session without quotes after the exits marks only HOLD;
+- precision: an allocation of 33,333.33 with a reference of 7.13 against an exact fraction, and a split of
+  100,000.00 into one, two and three participants with 0.00, 0.00 and 0.01 in cash; reconciliation of cash,
+  open value, equity, result, realized and unrealized for one, two and three participants;
+- composition: the documented example is provisional at 10:50 and final at 11:10 with the late confirmation
+  outside, and unchanged at 11:20 and later; a provisional composition that loses a participant when a late
+  reference arrives with an earlier market time; tied decisions treated together and a decision equal to the
+  first entry left outside; a reference of unknown receipt time keeps a later group provisional and never
+  becomes the first entry, while one after the known first entry changes nothing;
+- availability per session point: a quote quoted at 16:59 and received at 17:05 does not give the exit at the
+  17:00 point, which uses the earlier 14:10 quote, and the exit appears at the next point; a reference received
+  after the close keeps the share in cash at that point; a reference of unknown receipt time makes the
+  position unproven with no value and its points unobserved;
+- assisted date: two participants with 50,000.00 each, a pending participant kept in cash, a confirmation
+  after the first entry listed outside with no capital, recorded risks, the trigger history with market and
+  receipt times, equity by session with an unavailable HOLD value on the gap session, and past cuts that
+  exclude a quote quoted before the cut but received after it, decisions after the cut and a reference not
+  yet received;
+- cancellations: a quote recorded after a cancellation during the provider call creates no hit and gives no
+  exit; an exit proven by a quote linked hit before the cancellation is kept while the other strategies are
+  unproven from that hit; the strategy totals are incomplete with the affected capital and no equity;
+- unknown reference receipt: a run whose reference quote was removed keeps its recorded reference, the entry
+  shows `received_at` null, every strategy is `unproven` with no value or trigger, the share is affected
+  capital and not cash, the totals are incomplete, the composition stays provisional because of a later
+  selection, `reference_receipt_unknown` is listed and the session point is unobserved;
+- automatic date: a completed run keeps the A, B and C exits, HOLD ends at the completion quote, quotes of the
+  next run of the same instrument are not used, a past cut before completion shows the run open; an expired
+  window without exit is valued at its last quote with no trigger; the next date holds only its own run;
+- interfaces: REST and MCP return the portfolio on the first row page and null on a later page, the
+  capability `portfolio_simulation` is listed, the technical fields remain, and nothing is written.
+
+Validated on 2026-10-20 with the complete disposable Docker suite, and again on 2026-10-21 after the
+unknown receipt and per session availability fixes. Plugin 0.9.0: `make package` built
+`dist/stock-radar-0.9.0.zip` with the manifest at the archive root, version 0.9.0 and a description of 396
+characters, byte-identical to `plugin/`; `claude plugin validate ./plugin` passed; `git diff --check`.
+
+Not validated: the report against production data, the changed skill in Cowork, a scheduled run, and any
+real quote. The scenarios are synthetic and their timestamps are set by hand.

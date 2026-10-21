@@ -10,8 +10,11 @@ Collection registration stores candidates; under the assisted policy tracking ru
 confirmed selection (at most three new per session), while sessions under the earlier policy create or reuse
 runs at registration. A separate monitoring process polls quotes, activates runs and records threshold hits
 through the same tracking service. `services/policy.py` resolves the policy of a session and
-`services/selection.py` registers candidates, lists them and confirms selections. Financial metrics and live
-integrations remain pending. See [quote monitoring](operations.md#quote-monitoring).
+`services/selection.py` registers candidates, lists them and confirms selections. The daily report adds a
+simulated portfolio per collection date: `services/portfolio.py` loads the participants, references, quotes
+and quote linked hits at the report cut, `services/composition.py` freezes the composition at the first entry
+and `services/simulation.py` evaluates the exit strategies and reconciles the amounts with pure Decimal
+functions; nothing is stored. Live integrations remain pending. See [quote monitoring](operations.md#quote-monitoring).
 
 ## Backend layers
 

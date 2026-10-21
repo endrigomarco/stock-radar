@@ -112,7 +112,7 @@ def create_mcp(app) -> MCPServer:
     async def list_trigger_events(query: TriggerEventQuery, ctx: Context) -> TriggerEventPage:
         return await invoke(ctx, "list_trigger_events", lambda session: TrackingService(session).list_events(query))
 
-    @server.tool(description="Read the daily report: per collection date, signal progress since the recorded reference and target hit rates by session horizon, with sample exclusions. Polled quotes only; a missing hit is not proof. Paginated by collection date.", annotations=read)
+    @server.tool(description="Read the daily report: per collection date, a simulated 100000.00 portfolio with exit strategies A, B, C and holding rebuilt from polled quotes, signal progress since the recorded reference and target hit rates by session horizon, with sample exclusions. Polled quotes only, not real time; a missing hit is not proof and no exit price proves an execution. Paginated by collection date.", annotations=read)
     async def daily_report(query: DailyReportQuery, ctx: Context) -> DailyReport:
         return await invoke(ctx, "daily_report", lambda session: ReportService(session).daily(query))
 

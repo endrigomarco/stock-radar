@@ -23,6 +23,7 @@ from stock_radar.db.models import (
 from stock_radar.market_calendar import SessionBounds, TradingCalendar, load_calendar, market_date
 from stock_radar.services.collections import eligible_expression
 from stock_radar.services.policy import PolicyResolver, SelectionRules, selection_rules
+from stock_radar.services.portfolio import PortfolioService
 from stock_radar.services.tracking import EXPERIMENT_CODE, OPEN_STATUSES, TrackingService
 from stock_radar.viewmodels.reports import (
     CollectionGroup,
@@ -148,6 +149,11 @@ class ReportService:
             self._group(DayInput(day, policies[day], collections[day], [item for item in observations if item[1].market_session_date == day], decisions.get(day, [])), facts, generated_at, request, window_last)
             for day in page
         ]
+        if request.signal_offset == 0:
+            portfolios = PortfolioService(self.session).build_many(
+                {day: decisions.get(day, []) if policies[day].rules is not None else None for day in page}, generated_at,
+            )
+            groups = [group.model_copy(update={"portfolio": portfolios[group.market_session_date]}) for group in groups]
         self.session.rollback()
         return DailyReport(generated_at=generated_at, items=groups, limit=request.limit, offset=request.offset, has_more=len(dates) > request.limit)
 

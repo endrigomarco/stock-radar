@@ -44,7 +44,7 @@ Argument `request`:
 | `ranking_basis` | `full`, or `limited` when most research failed |
 | `summary` | 1 to 4000 characters |
 | `no_selection_reason` | Required when no candidate is selected, at most 2000 characters |
-| `plugin_version` | `0.8.0` |
+| `plugin_version` | `0.9.0` |
 | `decisions` | Exactly one per pending candidate |
 
 Decision fields:

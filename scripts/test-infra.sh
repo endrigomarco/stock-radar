@@ -50,6 +50,7 @@ compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/chec
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_observability.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_monitoring.py
 compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_reports.py
+compose run --rm --no-deps --volume "$(pwd)/tests:/checks:ro" tests /checks/check_portfolio.py
 # Authenticate over TCP, write synthetic data, then recreate the container to
 # verify persistence. Cleanup removes only this unique test project and volume.
 compose exec -T postgres sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'

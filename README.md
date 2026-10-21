@@ -13,8 +13,10 @@ new ones per session and only those create tracking runs (an open run is reused)
 its justification recorded. Assisted selection is implemented and validated with synthetic data only; it is
 not applied to any persistent database. A single Docker monitoring process can poll brapi
 quotes every 30 minutes, at minutes 10 and 40, during B3 sessions to lock references and record first observed threshold hits.
-Monitoring is disabled by default and has only been validated with a fake provider. Financial metrics,
-VPS deployment and live-provider integration remain pending. The plugin package for Cowork was
+Monitoring is disabled by default and has only been validated with a fake provider. The daily report
+also simulates a 100,000 BRL portfolio per collection date with three exit strategies and holding, rebuilt
+from the recorded quotes, with synthetic validation only. VPS deployment and live-provider integration
+remain pending. The plugin package for Cowork was
 installed by the owner and its skills were discovered. It bundles a local Python bridge to the service's MCP
 endpoint over the private network; the bridge passed synthetic checks, and its use from Cowork is not validated.
 
