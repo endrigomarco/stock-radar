@@ -5,7 +5,7 @@ Cowork and registers in the Stock Radar service, through MCP tools, only the sto
 is `Viés de alta forte` and whose daily change is negative, as candidates. Other rows are counted and not
 stored. The `select-candidates` skill then researches the candidates and confirms at most three new ones per
 session for tracking, with recorded justifications. The daily report opens with a simulated portfolio per
-collection date. Version 0.9.0.
+collection date. Version 0.9.1.
 
 Status: version 0.2.1 was installed in Cowork by the owner, who saw the four skills and the correct report
 of missing MCP tools. Version 0.5.0 adds a local Python bridge to the owner's Stock Radar service. The
@@ -28,6 +28,10 @@ Ask for the task in plain language, or type `/stock-radar:` and choose the skill
 ## Requirements
 
 - Claude desktop app with Cowork on the MacBook, and the Claude in Chrome integration.
+- The identifier of the Chrome on the MacBook Pro given explicitly in the request or the scheduled task
+  text. The skills never choose a browser by name, order or because it is the only one connected, work
+  only in tabs they create and close only those. The Chrome profile may be shared; no exclusive use of
+  the browser is enforced.
 - Chrome open with TradingView signed in. The skill never types credentials or solves captchas. When access
   is missing it stops, explains what it saw and waits for the reply `logado` before checking again.
 - Tailscale connected on the same computer, with access to the owner's Stock Radar service.
@@ -54,7 +58,7 @@ Once per computer. Nothing is installed at start or per call.
 1. Check for Python 3.10 or later: `python3 --version`. If it is missing or older, install a current
    Python from python.org first. No other tool is required.
 2. Extract the archive to a temporary folder, to reach the bridge files:
-   `unzip -o -q stock-radar-0.9.0.zip -d /tmp/stock-radar-plugin`
+   `unzip -o -q stock-radar-0.9.1.zip -d /tmp/stock-radar-plugin`
 3. Create the dedicated environment and install the pinned, hash-checked dependencies:
    `python3 -m venv "$HOME/Library/Application Support/stock-radar/bridge"`
    `"$HOME/Library/Application Support/stock-radar/bridge/bin/python" -m pip install --require-hashes --only-binary :all: -r /tmp/stock-radar-plugin/mcp/requirements.txt`

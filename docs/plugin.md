@@ -5,19 +5,23 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.9.0, prepared on 2026-10-20 for Claude Cowork on the MacBook Pro. The `daily-report` skill now
-opens with the simulated portfolio of each collection date, read from the extended `daily_report` tool, and
-keeps the technical report on request; it calls only `service_status` and `daily_report`, as before, so a
-scheduled task limited to those two tools needs no change. Version 0.8.0 added the `select-candidates` skill
-and adapted the others to assisted candidate selection. 0.9.0 was validated with `claude plugin validate`
-and packaged locally; it was not installed.
+Version 0.9.1, prepared on 2026-10-23, changes only the instructions of `collect-signals` and
+`select-candidates` for a Chrome profile shared with other projects; see
+[shared Chrome profile](#shared-chrome-profile). No tool, bridge behavior, backend or `daily-report` change;
+the bridge version constant follows the manifest. 0.9.1 was validated and packaged locally; it was not
+installed. Version 0.9.0, prepared on 2026-10-20, made the `daily-report` skill open with the simulated
+portfolio of each collection date, read from the extended `daily_report` tool, and keep the technical report
+on request; it calls only `service_status` and `daily_report`, as before, so a scheduled task limited to
+those two tools needs no change. Version 0.8.0 added the `select-candidates` skill and adapted the others
+to assisted candidate selection.
 
 | State | Scope |
 |---|---|
 | Implemented | Manifest with one local MCP server, the Python bridge in `plugin/mcp/`, six skills with their references, `make package` |
 | Tested with synthetic data | The bridge over stdio against a synthetic MCP server: discovery, successful calls, tool errors, refused token, closed port, redirect to another origin, clean diagnostics; in Docker and natively on macOS with Python 3.13 |
 | Tested by the owner | Reported on 2026-10-09: version 0.2.1 installed in Cowork with its four skills, and `check-status` reported the MCP tools as absent; from a terminal on the MacBook Pro an authenticated `initialize` to the VPS endpoint over Tailscale returned 200 |
-| Not validated | Cowork starting the bridge, tool discovery and any tool call from Cowork, the Keychain read on the MacBook, Python 3.10 to 3.12, Chrome reading of the real table, scheduling |
+| Reported by the owner | On 2026-10-23, with the version then installed and unchanged: a collection and a selection run from Cowork with two Chrome browsers connected; the browser was chosen by the identifier written in the scheduled task, an own tab was used and closed at the end, the table looked empty until its rows loaded after scrolling because header and rows render separately, 60 of 60 displayed rows were examined, and both writes returned receipts. Not reproduced from this repository |
+| Not validated | Beyond the owner's reports: Cowork starting the bridge, tool discovery and any tool call from Cowork, the Keychain read on the MacBook, Python 3.10 to 3.12, Chrome reading of the real table, scheduling |
 
 A terminal test is not evidence about Cowork. Connectivity from Cowork is not validated.
 
@@ -137,7 +141,7 @@ Steps run by the owner. Record the real results in [testing](testing.md).
    the dedicated environment, the Keychain item created with the prompting form of `security`, and the
    terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
 2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
-   `stock-radar-0.9.0.zip`, then quit and reopen the app.
+   `stock-radar-0.9.1.zip`, then quit and reopen the app.
 3. In a new Cowork task ask for a real call of `service_status`.
 
 | Outcome | Criterion |
@@ -203,9 +207,47 @@ removes only the Keychain item `stock-radar-sandbox-mcp` and fails harmlessly wh
 The proxy may also have left a copy in the npm cache and an empty `~/.mcp-auth` folder; both are shared
 with other uses of npm and may be left alone.
 
-## Scheduling: not configured
+## Shared Chrome profile
 
-The owner will create a daily scheduled task in Cowork that asks for the `collect-signals` skill.
+The owner keeps one Chrome profile on the MacBook Pro, with tabs of other projects and personal browsing
+open. Since 0.9.1 `collect-signals` and `select-candidates` follow these rules in their own instructions:
+
+- Browser: only the one whose identifier the request or the scheduled task text authorizes explicitly, used
+  when it appears exactly once among the connected browsers. Never by display name, list position,
+  operating system, local hints, tabs or because it is the only one connected, whatever the number of
+  browsers. Without an authorized identifier an interactive run asks for it and an unattended run stops
+  before opening a tab. The Chrome on the Mac mini is never authorized. Identifiers are not written in the
+  package, the documentation, examples or reports.
+- Tabs: every page in a tab created by the run, never a tab that was already open. Only own tabs still in
+  the session's tab context are closed; after a reconnection or a lost tab group, tabs of unproven ownership
+  stay open and only their number is reported. `select-candidates` keeps the authorization and own tabs it
+  receives from `collect-signals` in the same conversation, checks the browser is still connected exactly
+  once, and selects it again explicitly, confirming the selection, before any tab action.
+- Page identity: legitimate domain with a dot boundary, market, purpose and visible structure; the URL is
+  supporting evidence, so cosmetic variations and a small route change are accepted while lookalike hosts,
+  other markets, other lists and technical-only tables are refused. Investor relations pages count as
+  official only when reached from, or matching, the company's B3 or CVM page.
+- Table loading: header and rows may render separately and rows may load after scrolling. A header without
+  rows is not an empty list. Traversal continues while rows are added and ends normally when the end is
+  proven; after five consecutive attempts without progress and without a proven end it stops as `partial`
+  or `failed`, which never proves a complete or empty list. A complete reading with no qualified row stays `complete` with no observations, an empty list stated
+  by the page is `complete` with zero rows, and a loading failure is never `complete`.
+- Sharing: concrete evidence that another automation acts in an own tab stops browser actions; receipts
+  already returned stay valid.
+
+Known limitation, accepted by the owner on 2026-10-23 until a later version: the authorization is the
+identifier written in the scheduled task text, not a private registration, and nothing enforces exclusive
+use of the browser between automations of different projects. The tool descriptions consulted do not
+document any mutual exclusion between sessions that drive the same Chrome; that is not proof that none
+exists, only that none is documented or validated. A private registration with a mandatory reservation is
+deferred until a common contract with the other projects that automate this Chrome is defined, adopted and
+validated in Cowork; it would block navigation while any of those is missing.
+
+## Scheduling
+
+The owner reported two weekday Cowork tasks, Daily Signal Collection at 16:20 and Daily Report at 17:10,
+America/Sao_Paulo. Their configuration was not inspected from this repository. The report reads only
+`service_status` and `daily_report` and does not use Chrome.
 [Scheduled tasks](https://support.claude.com/en/articles/13854387-schedule-recurring-tasks-in-claude-cowork)
 are documented as running remotely by default, with tasks that need local files or apps running locally.
 The documentation does not say whether a scheduled run can drive Chrome on the MacBook. Treat this as
@@ -233,3 +275,5 @@ background. Do not label a previous session's list as today's.
 9. Run `collect-signals` and `select-candidates` interactively once with an authorized test service:
    confirm whether the table shows volume and sector columns, the unit of the volume column, that research
    pages can be opened, and that a late or interrupted selection is reported as such.
+10. After installing 0.9.1, observe one collection and selection: the authorized browser is used, only own
+    tabs are closed, the page is accepted, rows load after scrolling and the receipts match.

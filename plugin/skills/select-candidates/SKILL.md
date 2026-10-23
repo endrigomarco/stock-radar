@@ -25,6 +25,9 @@ em dashes. Report only what was actually read, confirmed and returned.
   something that happened after the decision.
 - In the browser, only open public pages and read them. Do not sign in, solve captchas, bypass paywalls or
   access controls, or buy anything. When a page is blocked, record the information as unavailable.
+- The user's Chrome profile is shared with other projects, personal browsing and possibly other
+  automations. Work only in tabs this run created. Never read, navigate, reload, group or close a tab this
+  run did not create. Nothing here makes the browser exclusive to this run; never claim that it was.
 
 ## 1. Check the connector
 
@@ -53,6 +56,54 @@ Only `pending` candidates are decided here. `already_tracked` candidates have an
 Candidates the service decided itself (`not_monitorable`, `daily_cap_reached`) are reported, not changed.
 
 ## 3. Research each pending candidate
+
+### Browser and own tabs
+
+Use only a Chrome browser whose identifier the user or the task text explicitly authorizes for this run:
+the user's Chrome on the MacBook Pro. A Chrome on the Mac mini is never authorized.
+
+- When this skill continues `collect-signals` in the same conversation, keep the browser authorization
+  already resolved there; do not ask for a choice again. List the connected browsers once more and continue
+  only when the authorized identifier still appears exactly once. Then select that browser explicitly by
+  that identifier and confirm that the selection took effect before creating, reading or closing any tab.
+  Being listed as connected does not prove that it is still the selected browser. Keep the own tab IDs
+  received from `collect-signals` as tabs of this run.
+- Run on its own, list the connected browsers and continue only when the authorized identifier appears
+  exactly once, then select that browser by that identifier.
+- Never choose a browser by display name (such as "Browser 1" or "Browser 2"), position in the list,
+  operating system, a local or remote hint, the tabs it shows, or because it is the only one connected. This
+  holds for any number of connected browsers, including one.
+- No authorized identifier: in an interactive conversation, ask the user to identify the Chrome of the
+  MacBook Pro explicitly, then end the turn and wait. In a run nobody answers, stop before opening any tab
+  and say that the candidates stay pending.
+- The authorized identifier is not connected, appears more than once, or the selection does not take
+  effect: stop before opening any tab, without switching browser, and say that the candidates stay pending.
+- Never write a browser identifier in the report, a file or an example.
+
+Open every source in a new tab created by this run and keep its tab ID, even when a tab already open shows
+the same site. When a source has been read, read the tab context and close that tab if its ID is still
+listed there. After a reconnection of the Chrome integration or the loss of the tab group, leave open any
+tab whose ownership cannot be established and report how many own tabs could not be closed, without URLs
+or titles.
+
+If there is concrete evidence that another automation is acting in an own tab, or that an own tab was
+navigated, closed or changed by something else, stop every browser action. When research is incomplete,
+continue to steps 4 to 6 only with what was actually read, following the existing rules for limited
+research, or stop before `confirm_selection` and say that the candidates stay pending. A receipt already
+returned stays valid and is reported as such.
+
+### Origin of a source
+
+Judge a page by its domain, its purpose and what it shows, with the URL only as supporting evidence. A host
+counts as an institution's domain only when it equals that domain or ends with `.` followed by it, so a host
+that merely contains a name is not that institution. B3 and CVM pages count as official when served from
+their own domains. A company page counts as its investor relations source only when it was reached from the
+company's page on B3 or CVM, or its domain is the one given there; a page's own claim is not enough.
+Otherwise use it as an ordinary page or record the official information as unavailable. For news, record
+the publisher shown together with the actual domain; a news page never proves an official fact by itself.
+After a redirect, judge the final page.
+
+### What to look for
 
 Spend comparable effort on each candidate, a few sources at most, so that a stock with more press coverage
 is not favoured just because more text exists. Prefer, in this order: official filings and notices (B3,
@@ -115,7 +166,7 @@ and must never be submitted.
 - One decision for every pending candidate, no more and no less, using its `decision_id`.
 - `rank` 1, 2, 3 and onward, contiguous, for selected and `outranked` candidates only; selected ones hold
   the best ranks. `outranked` is valid only when every remaining slot is filled.
-- `criteria_version` exactly as returned. `plugin_version` is `0.9.0`.
+- `criteria_version` exactly as returned. `plugin_version` is `0.9.1`.
 - Generate `client_selection_id` once with a real generator such as `uuidgen`, build the whole request and
   keep that exact text for the rest of the run.
 
@@ -160,7 +211,8 @@ For the session, briefly:
   still pending, and slots remaining;
 - per candidate: decision, rank, rationale, the evidence with source and dates, what was unavailable and the
   risks;
-- whether the ranking basis was `full` or `limited`, and that the tiebreak has no financial meaning.
+- whether the ranking basis was `full` or `limited`, and that the tiebreak has no financial meaning;
+- that the authorized browser was used, without its identifier, and how many own tabs were left open.
 
 Not selected candidates are stored for audit and are not tracked, so their later performance is not
 measured and the selection cannot be shown to beat them. A consensus rating is not a newly issued

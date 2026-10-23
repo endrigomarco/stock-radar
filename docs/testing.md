@@ -495,3 +495,28 @@ characters, byte-identical to `plugin/`; `claude plugin validate ./plugin` passe
 
 Not validated: the report against production data, the changed skill in Cowork, a scheduled run, and any
 real quote. The scenarios are synthetic and their timestamps are set by hand.
+
+## Shared Chrome profile instructions
+
+Plugin 0.9.1 changes only the instructions of `collect-signals` and `select-candidates`: the explicitly
+authorized browser without fallback, own tabs, page identity and table loading; see
+[plugin](plugin.md#shared-chrome-profile). The bridge version constant follows the manifest.
+
+Validated on 2026-10-23: the complete disposable Docker suite passed, including the bridge check that the
+manifest and bridge versions match; `make package` built `dist/stock-radar-0.9.1.zip` with the same 17
+files as `dist/stock-radar-0.9.0.zip`, which was left unchanged; only the manifest, the plugin README, the
+bridge version constant, the two skills and the selection contract and example differ; the archive is
+byte-identical to `plugin/` and holds no private configuration; the manifest description has 396
+characters; `claude plugin validate ./plugin` passed with a warning that the plugin README has no
+marketplace install line; `git diff --check` passed.
+
+The instruction rules were reviewed by reading, not executed: no browser choice by name, order or a single
+connected browser; own tabs only and no closing after a lost tab group; cosmetic URL variations accepted and
+lookalike hosts, other markets, other lists and technical-only tables refused; rows loaded after scrolling,
+a complete reading without qualified rows, an empty list stated by the page and a loading failure kept
+apart. No browser, Cowork task or service was used, so none of this is validated in Cowork.
+
+Reported by the owner, not reproduced here: on 2026-10-23 the version then installed collected and selected
+from Cowork with two browsers connected, using the identifier written in the scheduled task and an own tab
+closed at the end; the rows loaded only after scrolling; 60 of 60 rows were examined and both writes
+returned receipts.

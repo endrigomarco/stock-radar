@@ -5,7 +5,7 @@
   "ranking_basis": "full",
   "summary": "Synthetic example: three candidates selected, one outranked by sector composition, one excluded by a documented corporate event.",
   "no_selection_reason": null,
-  "plugin_version": "0.9.0",
+  "plugin_version": "0.9.1",
   "decisions": [
     {
       "decision_id": "00000000-0000-4000-8000-000000000201",
