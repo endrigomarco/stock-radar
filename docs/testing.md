@@ -520,3 +520,32 @@ Reported by the owner, not reproduced here: on 2026-10-23 the version then insta
 from Cowork with two browsers connected, using the identifier written in the scheduled task and an own tab
 closed at the end; the rows loaded only after scrolling; 60 of 60 rows were examined and both writes
 returned receipts.
+
+## Expanded exit strategies
+
+Simulation `exit-v2` adds D (+1%/-1%), E (+2%/-2%), F (+3%/-3%), G (+1%/-2%), H (+2%/-3%) and I (+3%/-4%)
+to A, B, C and HOLD; rules in [experiment](experiment.md#simulated-portfolios). Plugin 0.10.0 changes the
+`daily-report` presentation. `tests/check_portfolio.py` adds:
+
+- the ten definitions in order, with `added_in_version`, and `simulation_version` `exit-v2`;
+- the documented example extended to D to I under both exit prices, with A, B, C and HOLD unchanged;
+- D to I on the existing independence path, and a -1% stop followed by a recovery that exits every other
+  strategy at its target and leaves HOLD open;
+- the -4% stop of I: a quote just above it keeps the position open, an exact crossing exits at 9.60, and a
+  jump to 9.20 exits at the trigger price with a different first quote result;
+- report level: ten strategies in summaries, positions and equity by session; D to I results and the full
+  trigger history of the assisted date; an exact -4% crossing in the completed automatic run; I unproven
+  after a cancellation while D keeps its proven exit; every strategy incomplete with an unknown reference
+  receipt. The A, B, C and HOLD assertions of earlier versions are kept unchanged.
+
+Validated on 2026-10-27: the complete disposable Docker suite passed; `make package` built
+`dist/stock-radar-0.10.0.zip` with 17 files, manifest version 0.10.0 and a description of 396 characters,
+byte-identical to `plugin/`; `claude plugin validate ./plugin` passed with the marketplace install line
+advice; `git diff --check` passed. On the same day the `daily-report` text was adjusted to allow the highest
+observed result within one date; the 0.10.0 archive was rebuilt and checked again against `plugin/`, the
+plugin validation and `git diff --check` were repeated, and the Docker suite was not repeated for that
+text only change.
+
+Not validated: the report against production data, the changed skill in Cowork, and any real quote. The
+skill rules (compact table, highest observed result within one date with ties and its limits, no ranking or
+aggregation across dates, retrospective label, incomplete totals) were reviewed by reading, not executed.

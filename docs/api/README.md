@@ -327,12 +327,14 @@ cut. It is filled on the first row page of a date (`signal_offset` 0) and null o
 `portfolio_semantics` states its limits. The capability `portfolio_simulation` in `/v1/status` announces it;
 older consumers can ignore the field. Rules are in [experiment](../experiment.md#simulated-portfolios).
 
-- `cut_at`, `simulation_version` (`exit-v1`), `initial_capital` (100000.00), `provisional` and
+- `cut_at`, `simulation_version` (`exit-v2`), `initial_capital` (100000.00), `provisional` and
   `latest_quote` (symbol, price, `quoted_at`, `received_at`) of the participants, among quotes with a known
   receipt time.
 - `composition`: `status` (`empty`, `provisional`, `final`), `first_entry_at`, `participants`,
   `outside_portfolio`, `allocation_per_participant` and `rounding_residual`.
-- `strategies`: `A`, `B`, `C` and `HOLD` with `target_percent` and `stop_percent`, each with a
+- `strategies`: `A` to `I` and `HOLD`, in that order, with `target_percent`, `stop_percent` and
+  `added_in_version` (`exit-v1` for A, B, C and HOLD, `exit-v2` for D to I, which are rebuilt
+  retrospectively for earlier dates), each with a
   `trigger_price` block (exit at the trigger price) and a `first_quote` block (exit at the first recorded
   quote that reached it). A block has the counts `exits_target`, `exits_stop`, `open`, `window_closed`,
   `pending_entry`, `observation_ended` and `unproven`; the amounts `realized`, `unrealized`, `cash` and

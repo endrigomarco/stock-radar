@@ -5,7 +5,8 @@ from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal, localcontext
 
 from stock_radar.services.errors import ServiceError
 
-SIMULATION_VERSION = "exit-v1"
+SIMULATION_VERSION = "exit-v2"
+ORIGINAL_VERSION = "exit-v1"
 INITIAL_CAPITAL = Decimal("100000.00")
 CENT = Decimal("0.01")
 PRICE_STEP = Decimal("0.00000001")
@@ -27,13 +28,20 @@ class Strategy:
     code: str
     target_percent: Decimal | None
     stop_percent: Decimal | None
+    added_in: str
 
 
 STRATEGIES = (
-    Strategy("A", Decimal("1"), Decimal("-3")),
-    Strategy("B", Decimal("2"), Decimal("-5")),
-    Strategy("C", Decimal("3"), Decimal("-6")),
-    Strategy("HOLD", None, None),
+    Strategy("A", Decimal("1"), Decimal("-3"), ORIGINAL_VERSION),
+    Strategy("B", Decimal("2"), Decimal("-5"), ORIGINAL_VERSION),
+    Strategy("C", Decimal("3"), Decimal("-6"), ORIGINAL_VERSION),
+    Strategy("D", Decimal("1"), Decimal("-1"), SIMULATION_VERSION),
+    Strategy("E", Decimal("2"), Decimal("-2"), SIMULATION_VERSION),
+    Strategy("F", Decimal("3"), Decimal("-3"), SIMULATION_VERSION),
+    Strategy("G", Decimal("1"), Decimal("-2"), SIMULATION_VERSION),
+    Strategy("H", Decimal("2"), Decimal("-3"), SIMULATION_VERSION),
+    Strategy("I", Decimal("3"), Decimal("-4"), SIMULATION_VERSION),
+    Strategy("HOLD", None, None, ORIGINAL_VERSION),
 )
 
 

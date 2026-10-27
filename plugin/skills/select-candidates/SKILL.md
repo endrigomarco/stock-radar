@@ -166,7 +166,7 @@ and must never be submitted.
 - One decision for every pending candidate, no more and no less, using its `decision_id`.
 - `rank` 1, 2, 3 and onward, contiguous, for selected and `outranked` candidates only; selected ones hold
   the best ranks. `outranked` is valid only when every remaining slot is filled.
-- `criteria_version` exactly as returned. `plugin_version` is `0.9.1`.
+- `criteria_version` exactly as returned. `plugin_version` is `0.10.0`.
 - Generate `client_selection_id` once with a real generator such as `uuidgen`, build the whole request and
   keep that exact text for the rest of the run.
 

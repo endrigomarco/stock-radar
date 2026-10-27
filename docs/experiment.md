@@ -87,7 +87,9 @@ the criteria after seeing results; a change of criteria needs a new version.
 
 ## Simulated portfolios
 
-Implemented in the daily report as `simulation_version` `exit-v1` and validated with synthetic data only.
+Implemented in the daily report as `simulation_version` `exit-v2` and validated with synthetic data only.
+`exit-v1` had strategies A, B, C and HOLD; `exit-v2` adds D to I and leaves the results of the first four
+unchanged for the same records and cut.
 The question it answers: had 100,000.00 been invested in the stocks of each collection date with fixed exit
 triggers, which positions would have left, when the evidence was recorded and what the result would be. It is
 a theoretical exercise rebuilt on every read from stored records; nothing is persisted, no order exists and
@@ -118,8 +120,20 @@ October 10:45 for BBBB4, AAAA3 quoted at 10:30 and received at 11:05, CCCC3 quot
 entry is 10:30, BBBB4 is outside and the composition is final, because the only included group was decided
 the day before; at 11:20 it is unchanged.
 
-**Strategies.** A exits at +1% or -3%, B at +2% or -5%, C at +3% or -6%; HOLD never exits early. Each
-strategy is independent. Thresholds are `reference * (1 + percent / 100)`; a quote reaches a target when its
+**Strategies.** Nine exit strategies and HOLD, compared on the same stocks, references, allocations, quotes
+and observation horizon:
+
+| Strategy | A | B | C | D | E | F | G | H | I | HOLD |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Target | +1% | +2% | +3% | +1% | +2% | +3% | +1% | +2% | +3% | none |
+| Stop | -3% | -5% | -6% | -1% | -2% | -3% | -2% | -3% | -4% | none |
+| Added in | `exit-v1` | `exit-v1` | `exit-v1` | `exit-v2` | `exit-v2` | `exit-v2` | `exit-v2` | `exit-v2` | `exit-v2` | `exit-v1` |
+
+Each strategy is independent: an exit in one never closes another and never changes the tracking run, its
+levels or its completion. Every level, including -4%, -5% and -6%, is computed from the stored accepted
+quotes; none is a stored tracking level. The report returns `added_in_version` per strategy. D to I are
+rebuilt for every date, including dates collected before `exit-v2`, from the same stored evidence: for those
+dates they are a retrospective analysis, and the rules were not in use then. Thresholds are `reference * (1 + percent / 100)`; a quote reaches a target when its
 price is greater than or equal to it and a stop when it is less than or equal to it, using only quotes with a
 market time after the reference. The first reached trigger closes the position for that strategy; the
 realized result stays fixed and the proceeds stay in cash, with no reinvestment or reentry. Two exit prices
@@ -178,13 +192,24 @@ at 20.00 and was quoted 19.10 and 19.30; CCCC3 is waiting for entry.
 | A +1%/-3% | -666.67 | 0.00 | 99,333.33 | 0.00 | 99,333.33 | -666.67 (-0.67%) |
 | B +2%/-5% | 666.67 | -1,166.67 | 67,333.34 | 32,166.66 | 99,500.00 | -500.00 (-0.50%) |
 | C +3%/-6% | 0.00 | -333.34 | 33,333.34 | 66,333.32 | 99,666.66 | -333.34 (-0.33%) |
+| D +1%/-1% | 0.00 | 0.00 | 100,000.00 | 0.00 | 100,000.00 | 0.00 (0.00%) |
+| E +2%/-2% | 0.00 | 0.00 | 100,000.00 | 0.00 | 100,000.00 | 0.00 (0.00%) |
+| F +3%/-3% | -1,000.00 | 833.33 | 65,666.67 | 34,166.66 | 99,833.33 | -166.67 (-0.17%) |
+| G +1%/-2% | -333.34 | 0.00 | 99,666.66 | 0.00 | 99,666.66 | -333.34 (-0.33%) |
+| H +2%/-3% | -333.33 | 0.00 | 99,666.67 | 0.00 | 99,666.67 | -333.33 (-0.33%) |
+| I +3%/-4% | -1,333.33 | 833.33 | 65,333.34 | 34,166.66 | 99,500.00 | -500.00 (-0.50%) |
 | HOLD | 0.00 | -333.34 | 33,333.34 | 66,333.32 | 99,666.66 | -333.34 (-0.33%) |
 
-At the first recorded quote: A -1,033.33 (-1.03%), B -433.34 (-0.43%), C and HOLD unchanged.
+At the first recorded quote: A -1,033.33 (-1.03%), B -433.34 (-0.43%), D and G -1,033.33 (-1.03%), E and H
+-766.67 (-0.77%), F and I -666.67 (-0.67%), C and HOLD unchanged. BBBB4 at 19.10 crosses the -4% stop of I
+beyond its level: the trigger price is 19.20 and the first recorded quote 19.10.
 
-Historical limits: runs completed before this version stop being observed at completion, so HOLD is truncated
-there; cancelled runs without a later quote linked hit stay unproven from that hit or the reference; the last
-minutes of each session are not polled.
+Historical limits: tracking still ends when the six operational levels (1%, 2% and 3% up and down) are
+recorded, and quotes stop there. HOLD and any strategy without an exit by then are `observation_ended` and
+their totals are incomplete; `complete` false is not a closed window, `complete` true only means every
+position has a determinable value, and no quote is extended past the end. HOLD is therefore truncated
+there; cancelled runs without a later quote linked hit stay unproven from that hit or the reference; the
+last minutes of each session are not polled. Changing the end of tracking needs a new experiment version.
 
 ## Earlier proposals for manual alerts
 

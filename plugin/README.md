@@ -5,7 +5,7 @@ Cowork and registers in the Stock Radar service, through MCP tools, only the sto
 is `Viés de alta forte` and whose daily change is negative, as candidates. Other rows are counted and not
 stored. The `select-candidates` skill then researches the candidates and confirms at most three new ones per
 session for tracking, with recorded justifications. The daily report opens with a simulated portfolio per
-collection date. Version 0.9.1.
+collection date. Version 0.10.0.
 
 Status: version 0.2.1 was installed in Cowork by the owner, who saw the four skills and the correct report
 of missing MCP tools. Version 0.5.0 adds a local Python bridge to the owner's Stock Radar service. The
@@ -20,7 +20,7 @@ not validated yet. See `docs/plugin.md` in the repository.
 | `select-candidates` | Reads the pending candidates of a session, researches public context in Chrome, ranks them and calls `confirm_selection`. Records justifications, risks and unavailable information. No trading, no probabilities. |
 | `check-status` | Read-only view of service availability, collection receipts, quality counts and tracking state. |
 | `analyze-results` | Read-only description of stored signals, runs and recorded hits. No computed performance metrics exist yet. |
-| `daily-report` | Read-only end of day report computed by the service. It starts with the simulated 100,000 BRL portfolio of each collection date under exit strategies A, B, C and holding, with results, cash, equity, triggers and limits; the technical milestones and hit rates follow on request. No orders, not real time. |
+| `daily-report` | Read-only end of day report computed by the service. It starts with the simulated 100,000 BRL portfolio of each collection date under nine exit strategies (A to I) and holding, in a compact table per date, with results, cash, equity, triggers and limits; the technical milestones and hit rates follow on request. No orders, not real time. |
 | `prepare-triggers` | View of tracking runs, plus cancellation of one run on explicit request. Tracking is prepared by the backend; this skill prepares nothing. |
 
 Ask for the task in plain language, or type `/stock-radar:` and choose the skill.
@@ -58,7 +58,7 @@ Once per computer. Nothing is installed at start or per call.
 1. Check for Python 3.10 or later: `python3 --version`. If it is missing or older, install a current
    Python from python.org first. No other tool is required.
 2. Extract the archive to a temporary folder, to reach the bridge files:
-   `unzip -o -q stock-radar-0.9.1.zip -d /tmp/stock-radar-plugin`
+   `unzip -o -q stock-radar-0.10.0.zip -d /tmp/stock-radar-plugin`
 3. Create the dedicated environment and install the pinned, hash-checked dependencies:
    `python3 -m venv "$HOME/Library/Application Support/stock-radar/bridge"`
    `"$HOME/Library/Application Support/stock-radar/bridge/bin/python" -m pip install --require-hashes --only-binary :all: -r /tmp/stock-radar-plugin/mcp/requirements.txt`

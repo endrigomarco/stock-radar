@@ -102,7 +102,7 @@ def build_output(data: PortfolioInput) -> PortfolioOutput:
 def _summary(index: int, strategy: Strategy, evaluated: list[Evaluated], allocation: Decimal, residual: Decimal) -> StrategySummary:
     entries = [(item.outcomes[index], allocation) for item in evaluated]
     return StrategySummary(
-        strategy=strategy.code, target_percent=strategy.target_percent, stop_percent=strategy.stop_percent,
+        strategy=strategy.code, target_percent=strategy.target_percent, stop_percent=strategy.stop_percent, added_in_version=strategy.added_in,
         trigger_price=_basis(summarize(entries, residual, TRIGGER_BASIS)), first_quote=_basis(summarize(entries, residual, QUOTE_BASIS)),
     )
 

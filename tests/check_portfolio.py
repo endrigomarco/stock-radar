@@ -27,6 +27,7 @@ from stock_radar.services.composition import Candidate, compose
 from stock_radar.services.reports import ReportService
 from stock_radar.services.simulation import (
     QUOTE_BASIS,
+    SIMULATION_VERSION,
     STRATEGIES,
     TRIGGER_BASIS,
     Observation,
@@ -62,6 +63,10 @@ def observation(reference: Reading | None, readings: list[Reading], end: str = "
     return Observation(reference, tuple(readings), end if reference else "pending", last if reference else None, at(12, 30, 17) if reference else None, sessions, True)
 
 
+def by_code(code: str):
+    return next(item for item in STRATEGIES if item.code == code)
+
+
 def documented_example() -> dict:
     allocation, residual = split_capital(3)
     aaaa = observation(reading(10, 15, 10, 40, "10.00"), [reading(10, 15, 13, 10, "10.14"), reading(10, 19, 14, 40, "10.22"), reading(10, 20, 16, 40, "10.25")])
@@ -83,6 +88,29 @@ def check_documented_example() -> None:
     assert table[("B", TRIGGER_BASIS)] == ("666.67", "-1166.67", "67333.34", "32166.66", "99500.00", "-500.00", "-0.50"), table[("B", TRIGGER_BASIS)]
     assert table[("B", QUOTE_BASIS)] == ("733.33", "-1166.67", "67400.00", "32166.66", "99566.66", "-433.34", "-0.43"), table[("B", QUOTE_BASIS)]
     assert table[("C", TRIGGER_BASIS)] == table[("C", QUOTE_BASIS)] == table[("HOLD", TRIGGER_BASIS)] == ("0.00", "-333.34", "33333.34", "66333.32", "99666.66", "-333.34", "-0.33")
+    expanded = {
+        "D": ("0.00", "0.00", "100000.00", "0.00", "100000.00", "0.00", "0.00"),
+        "E": ("0.00", "0.00", "100000.00", "0.00", "100000.00", "0.00", "0.00"),
+        "F": ("-1000.00", "833.33", "65666.67", "34166.66", "99833.33", "-166.67", "-0.17"),
+        "G": ("-333.34", "0.00", "99666.66", "0.00", "99666.66", "-333.34", "-0.33"),
+        "H": ("-333.33", "0.00", "99666.67", "0.00", "99666.67", "-333.33", "-0.33"),
+        "I": ("-1333.33", "833.33", "65333.34", "34166.66", "99500.00", "-500.00", "-0.50"),
+    }
+    assert {code: table[(code, TRIGGER_BASIS)] for code in expanded} == expanded
+    first_quote = {"D": "-1033.33", "E": "-766.67", "F": "-666.67", "G": "-1033.33", "H": "-766.67", "I": "-666.67"}
+    assert {code: table[(code, QUOTE_BASIS)][5] for code in first_quote} == first_quote
+
+
+def check_definitions() -> None:
+    definitions = [(item.code, item.target_percent, item.stop_percent, item.added_in) for item in STRATEGIES]
+    original, expanded = "exit-v1", "exit-v2"
+    assert definitions == [
+        ("A", Decimal("1"), Decimal("-3"), original), ("B", Decimal("2"), Decimal("-5"), original), ("C", Decimal("3"), Decimal("-6"), original),
+        ("D", Decimal("1"), Decimal("-1"), expanded), ("E", Decimal("2"), Decimal("-2"), expanded), ("F", Decimal("3"), Decimal("-3"), expanded),
+        ("G", Decimal("1"), Decimal("-2"), expanded), ("H", Decimal("2"), Decimal("-3"), expanded), ("I", Decimal("3"), Decimal("-4"), expanded),
+        ("HOLD", None, None, original),
+    ], definitions
+    assert SIMULATION_VERSION == expanded
 
 
 def check_triggers_and_independence() -> None:
@@ -94,8 +122,47 @@ def check_triggers_and_independence() -> None:
     assert (b.state, b.trigger_value, b.quote_value, b.exit_reading.price) == ("exited_stop", Decimal("47500.00"), Decimal("47250.00"), Decimal("9.45"))
     assert (c.state, c.trigger_value, c.quote_value) == ("exited_stop", Decimal("47000.00"), Decimal("47000.00"))
     assert (hold.state, hold.trigger_value, hold.valuation.price) == ("open", Decimal("52000.00"), Decimal("10.40"))
-    later = evaluate(STRATEGIES[0], Decimal("50000.00"), observation(reference, [*path, reading(11, 10, 10, 10, "7.00"), reading(11, 12, 10, 10, "15.00")]))
+    later = evaluate(by_code("A"), Decimal("50000.00"), observation(reference, [*path, reading(11, 10, 10, 10, "7.00"), reading(11, 12, 10, 10, "15.00")]))
     assert (later.state, later.trigger_value, later.quote_value, later.exit_reading) == (a.state, a.trigger_value, a.quote_value, a.exit_reading)
+    expanded = {code: (outcomes[code].state, outcomes[code].trigger_value, outcomes[code].quote_value, outcomes[code].exit_reading.price) for code in "DEFGHI"}
+    assert expanded == {
+        "D": ("exited_target", Decimal("50500.00"), Decimal("50750.00"), Decimal("10.15")),
+        "E": ("exited_stop", Decimal("49000.00"), Decimal("47250.00"), Decimal("9.45")),
+        "F": ("exited_stop", Decimal("48500.00"), Decimal("47250.00"), Decimal("9.45")),
+        "G": ("exited_target", Decimal("50500.00"), Decimal("50750.00"), Decimal("10.15")),
+        "H": ("exited_stop", Decimal("48500.00"), Decimal("47250.00"), Decimal("9.45")),
+        "I": ("exited_stop", Decimal("48000.00"), Decimal("47250.00"), Decimal("9.45")),
+    }, expanded
+
+
+def check_short_stop_then_recovery() -> None:
+    reference = reading(11, 4, 10, 10, "10.00")
+    item = observation(reference, [reading(11, 4, 11, 10, "9.90"), reading(11, 5, 11, 10, "10.35")])
+    outcomes = {strategy.code: evaluate(strategy, Decimal("50000.00"), item) for strategy in STRATEGIES}
+    d = outcomes["D"]
+    assert (d.state, d.trigger_value, d.quote_value, d.exit_reading.price) == ("exited_stop", Decimal("49500.00"), Decimal("49500.00"), Decimal("9.90"))
+    targets = {code: (outcomes[code].state, outcomes[code].trigger_value, outcomes[code].quote_value) for code in "ABCEFGHI"}
+    assert targets == {
+        "A": ("exited_target", Decimal("50500.00"), Decimal("51750.00")), "B": ("exited_target", Decimal("51000.00"), Decimal("51750.00")),
+        "C": ("exited_target", Decimal("51500.00"), Decimal("51750.00")), "E": ("exited_target", Decimal("51000.00"), Decimal("51750.00")),
+        "F": ("exited_target", Decimal("51500.00"), Decimal("51750.00")), "G": ("exited_target", Decimal("50500.00"), Decimal("51750.00")),
+        "H": ("exited_target", Decimal("51000.00"), Decimal("51750.00")), "I": ("exited_target", Decimal("51500.00"), Decimal("51750.00")),
+    }, targets
+    hold = outcomes["HOLD"]
+    assert (hold.state, hold.trigger_value, hold.valuation.price) == ("open", Decimal("51750.00"), Decimal("10.35"))
+    alone = evaluate(by_code("G"), Decimal("50000.00"), item)
+    assert (alone.state, alone.trigger_value, alone.exit_reading) == (outcomes["G"].state, outcomes["G"].trigger_value, outcomes["G"].exit_reading)
+
+
+def check_four_percent_stop() -> None:
+    reference = reading(11, 4, 10, 10, "10.00")
+    strategy_i = by_code("I")
+    above = evaluate(strategy_i, Decimal("50000.00"), observation(reference, [reading(11, 4, 11, 10, "9.61")]))
+    assert (above.state, above.trigger_value) == ("open", Decimal("48050.00")), above
+    exact = evaluate(strategy_i, Decimal("50000.00"), observation(reference, [reading(11, 4, 11, 10, "9.61"), reading(11, 4, 12, 10, "9.60")]))
+    assert (exact.state, exact.trigger_percent, exact.trigger_price, exact.trigger_value, exact.quote_value) == ("exited_stop", Decimal("-4"), Decimal("9.6000"), Decimal("48000.00"), Decimal("48000.00")), exact
+    jump = evaluate(strategy_i, Decimal("50000.00"), observation(reference, [reading(11, 4, 11, 10, "9.61"), reading(11, 4, 12, 10, "9.20"), reading(11, 5, 11, 10, "10.40")]))
+    assert (jump.state, jump.trigger_value, jump.quote_value, jump.exit_reading.price) == ("exited_stop", Decimal("48000.00"), Decimal("46000.00"), Decimal("9.20")), jump
 
 
 def check_coverage_by_interval() -> None:
@@ -103,7 +170,7 @@ def check_coverage_by_interval() -> None:
     reference = reading(11, 4, 10, 10, "10.00")
     path = [reading(11, 4, 11, 10, "10.15"), reading(11, 5, 14, 10, "9.40"), reading(11, 9, 10, 10, "10.40")]
     item = observation(reference, path, until=at(11, 9, 17), sessions=sessions)
-    a, c, hold = (evaluate(STRATEGIES[index], Decimal("50000.00"), item) for index in (0, 2, 3))
+    a, c, hold = (evaluate(by_code(code), Decimal("50000.00"), item) for code in ("A", "C", "HOLD"))
     assert a.missing_sessions == () and c.missing_sessions == () and hold.missing_sessions == (date(2026, 11, 6),), (a, c, hold)
 
 
@@ -116,7 +183,7 @@ def check_session_availability() -> None:
     def equity(strategy, observed: Observation, session: TradingSession) -> Decimal | None:
         return session_value([(evaluate(strategy, allocation, observed), allocation, observed)], Decimal("0.00"), session, cut).trigger_equity
 
-    a, hold = STRATEGIES[0], STRATEGIES[3]
+    a, hold = by_code("A"), by_code("HOLD")
     assert evaluate(a, allocation, item).exit_reading.received_at == at(11, 4, 17, 5)
     assert equity(a, item, closing) == equity(hold, item, closing) == Decimal("50250.00")
     assert equity(a, item, next_day) == Decimal("50500.00") and equity(hold, item, next_day) is None
@@ -152,7 +219,7 @@ def check_reconciliation() -> None:
                 totals = summarize(entries, residual, basis)
                 assert totals.complete and totals.equity == totals.cash + totals.open_value, totals
                 assert totals.result == totals.equity - Decimal("100000.00") == totals.realized + totals.unrealized, totals
-    pending = summarize([(evaluate(STRATEGIES[0], Decimal("50000.00"), observation(None, [])), Decimal("50000.00"))] * 2, Decimal("0.00"), TRIGGER_BASIS)
+    pending = summarize([(evaluate(by_code("A"), Decimal("50000.00"), observation(None, [])), Decimal("50000.00"))] * 2, Decimal("0.00"), TRIGGER_BASIS)
     assert (pending.cash, pending.result, pending.counts["pending_entry"]) == (Decimal("100000.00"), Decimal("0.00"), 2)
 
 
@@ -384,11 +451,26 @@ def check_assisted(portfolio_at) -> None:
     assert amounts(hold, *keys) == tuple(Decimal(value) for value in ("0.00", "1250.00", "50000.00", "51250.00", "101250.00", "1250.00", "1.25")), (hold, held(final, "PFA3", "HOLD"))
     assert (hold["minimum_coverage_missing_positions"], Decimal(hold["minimum_coverage_missing_capital"])) == (1, Decimal("50000.00"))
     assert held(final, "PFA3", "HOLD")["sessions_without_quote"] == ["2026-08-06"] and held(final, "PFA3", "A")["minimum_coverage"] is True
-    triggers = [(item["strategy"], item["exit_kind"], item["quote"]["price"], item["quote"]["quoted_at"], item["quote"]["received_at"]) for item in final["triggers"]]
+    assert [item["strategy"] for item in final["strategies"]] == [item.code for item in STRATEGIES]
+    assert [item["added_in_version"] for item in final["strategies"]] == ["exit-v1"] * 3 + ["exit-v2"] * 6 + ["exit-v1"]
+    assert all(len(item["strategies"]) == len(STRATEGIES) for item in final["positions"] if item["participation"] == "participant")
+    assert all(len(item["strategies"]) == len(STRATEGIES) for item in final["equity_by_session"])
+    expanded = {code: (amounts(strategy(final, code), "result")[0], amounts(strategy(final, code, "first_quote"), "result")[0]) for code in "DEFGHI"}
+    assert expanded == {
+        "D": (Decimal("500.00"), Decimal("750.00")), "E": (Decimal("-1000.00"), Decimal("-1500.00")), "F": (Decimal("-1500.00"), Decimal("-1500.00")),
+        "G": (Decimal("500.00"), Decimal("750.00")), "H": (Decimal("-1500.00"), Decimal("-1500.00")), "I": (Decimal("-2000.00"), Decimal("-2750.00")),
+    }, expanded
+    triggers = [(item["strategy"], item["exit_kind"], item["trigger_price"], item["quote"]["price"], item["quote"]["quoted_at"], item["quote"]["received_at"]) for item in final["triggers"]]
     assert triggers == [
-        ("A", "target", "10.15000000", "2026-08-04T14:10:00Z", "2026-08-04T14:15:00Z"),
-        ("B", "stop", "9.45000000", "2026-08-05T14:55:00Z", "2026-08-05T15:05:00Z"),
-        ("C", "stop", "9.40000000", "2026-08-05T17:10:00Z", "2026-08-05T17:15:00Z"),
+        ("A", "target", "10.10000000", "10.15000000", "2026-08-04T14:10:00Z", "2026-08-04T14:15:00Z"),
+        ("D", "target", "10.10000000", "10.15000000", "2026-08-04T14:10:00Z", "2026-08-04T14:15:00Z"),
+        ("G", "target", "10.10000000", "10.15000000", "2026-08-04T14:10:00Z", "2026-08-04T14:15:00Z"),
+        ("E", "stop", "9.80000000", "9.70000000", "2026-08-05T13:10:00Z", "2026-08-05T13:15:00Z"),
+        ("F", "stop", "9.70000000", "9.70000000", "2026-08-05T13:10:00Z", "2026-08-05T13:15:00Z"),
+        ("H", "stop", "9.70000000", "9.70000000", "2026-08-05T13:10:00Z", "2026-08-05T13:15:00Z"),
+        ("B", "stop", "9.50000000", "9.45000000", "2026-08-05T14:55:00Z", "2026-08-05T15:05:00Z"),
+        ("I", "stop", "9.60000000", "9.45000000", "2026-08-05T14:55:00Z", "2026-08-05T15:05:00Z"),
+        ("C", "stop", "9.40000000", "9.40000000", "2026-08-05T17:10:00Z", "2026-08-05T17:15:00Z"),
     ], triggers
     gap = next(item for item in final["equity_by_session"] if item["session_date"] == "2026-08-06")
     gap_values = {item["strategy"]: (item["trigger_price_equity"], item["positions_without_quote"]) for item in gap["strategies"]}
@@ -430,6 +512,10 @@ def check_cancellations(portfolio_at, world: World) -> None:
     pgc = held(portfolio, "PGC3", "A")
     assert (pgc["trigger_price_value"], pgc["first_quote_value"]) == ("33666.66", "33707.34"), pgc
     assert "unproven_after_last_evidence" in portfolio["limitations"]
+    assert (held(portfolio, "PGA3", "D")["state"], held(portfolio, "PGA3", "D")["exit_quote"]["price"]) == ("exited_stop", "9.65000000")
+    pga_i = held(portfolio, "PGA3", "I")
+    assert (pga_i["state"], pga_i["exit_quote"], pga_i["valuation"]["price"]) == ("unproven", None, "9.65000000"), pga_i
+    assert strategy(portfolio, "I")["complete"] is False and strategy(portfolio, "I")["equity"] is None
 
 
 def check_unknown_receipt(portfolio_at, world: World) -> None:
@@ -446,7 +532,7 @@ def check_unknown_receipt(portfolio_at, world: World) -> None:
     assert not any(item["symbol"] == "PIA3" for item in portfolio["triggers"])
     assert portfolio["composition"]["status"] == "provisional" and portfolio["composition"]["participants"] == 2
     assert portfolio["composition"]["first_entry_at"] == "2026-08-25T14:10:00Z"
-    for code in ("A", "HOLD"):
+    for code in (item.code for item in STRATEGIES):
         totals = strategy(portfolio, code)
         assert (totals["complete"], totals["equity"], totals["unproven"], totals["pending_entry"]) == (False, None, 1, 0), totals
         assert amounts(totals, "affected_capital", "cash", "open_value") == (Decimal("50000.00"), Decimal("0.00"), Decimal("50000.00")), totals
@@ -473,6 +559,11 @@ def check_automatic(portfolio_at) -> None:
     assert amounts(strategy(portfolio, "A", "first_quote"), *keys) == (Decimal("97750.00"), Decimal("-2250.00"))
     assert amounts(strategy(portfolio, "B"), *keys) == (Decimal("100750.00"), Decimal("750.00"))
     assert amounts(strategy(portfolio, "C"), *keys) == (Decimal("101250.00"), Decimal("1250.00"))
+    expanded = {code: (held(portfolio, "PHA3", code)["state"], held(portfolio, "PHA3", code)["trigger_price_value"], held(portfolio, "PHA3", code)["first_quote_value"]) for code in "DEFGHI"}
+    assert expanded == {
+        "D": ("exited_stop", "49500.00", "48000.00"), "E": ("exited_stop", "49000.00", "48000.00"), "F": ("exited_stop", "48500.00", "48000.00"),
+        "G": ("exited_stop", "49000.00", "48000.00"), "H": ("exited_stop", "48500.00", "48000.00"), "I": ("exited_stop", "48000.00", "48000.00"),
+    }, expanded
     hold = strategy(portfolio, "HOLD")
     assert hold["complete"] is False and hold["equity"] is None and (hold["observation_ended"], Decimal(hold["affected_capital"]), Decimal(hold["open_value"])) == (1, Decimal("50000.00"), Decimal("49750.00"))
     after = next(item for item in portfolio["equity_by_session"] if item["session_date"] == "2026-08-18")
@@ -500,7 +591,7 @@ def check_interfaces(settings: Settings, engine) -> None:
         response = client.get("/v1/reports/daily", headers=reader, params={"market_session_date": "2026-08-03"})
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["items"][0]["portfolio"]["simulation_version"] == "exit-v1" and "not real time" in body["portfolio_semantics"]
+        assert body["items"][0]["portfolio"]["simulation_version"] == "exit-v2" and "not real time" in body["portfolio_semantics"]
         assert body["items"][0]["horizons"] and body["items"][0]["selection"] is not None
         paged = client.get("/v1/reports/daily", headers=reader, params={"market_session_date": "2026-08-03", "signal_offset": 1, "signal_limit": 1}).json()
         assert paged["items"][0]["portfolio"] is None
@@ -512,8 +603,11 @@ def check_interfaces(settings: Settings, engine) -> None:
 
 
 def main() -> None:
+    check_definitions()
     check_documented_example()
     check_triggers_and_independence()
+    check_short_stop_then_recovery()
+    check_four_percent_stop()
     check_coverage_by_interval()
     check_precision_and_split()
     check_reconciliation()
@@ -539,7 +633,7 @@ def main() -> None:
     check_interfaces(settings, reader_engine)
     admin.dispose()
     reader_engine.dispose()
-    print("Portfolio checks passed: triggers, jumps, independent strategies, preserved exits, coverage by interval, cancellations, completion, expiry, cut, composition, unknown reference receipts, data availability per session, precision, reconciliation and read-only access.")
+    print("Portfolio checks passed: ten strategy definitions, triggers, jumps, the -4% stop, independent strategies after a short stop, preserved exits, coverage by interval, cancellations, completion, expiry, cut, composition, unknown reference receipts, data availability per session, precision, reconciliation and read-only access.")
 
 
 if __name__ == "__main__":

@@ -83,6 +83,7 @@ class StrategySummary(BaseModel):
     strategy: str
     target_percent: Decimal | None
     stop_percent: Decimal | None
+    added_in_version: str
     trigger_price: BasisTotals
     first_quote: BasisTotals
 

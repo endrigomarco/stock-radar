@@ -5,15 +5,21 @@ The plugin root is `plugin/`, not the repository root. Only that directory is pa
 
 ## Current state
 
-Version 0.9.1, prepared on 2026-10-23, changes only the instructions of `collect-signals` and
-`select-candidates` for a Chrome profile shared with other projects; see
-[shared Chrome profile](#shared-chrome-profile). No tool, bridge behavior, backend or `daily-report` change;
-the bridge version constant follows the manifest. 0.9.1 was validated and packaged locally; it was not
-installed. Version 0.9.0, prepared on 2026-10-20, made the `daily-report` skill open with the simulated
-portfolio of each collection date, read from the extended `daily_report` tool, and keep the technical report
-on request; it calls only `service_status` and `daily_report`, as before, so a scheduled task limited to
-those two tools needs no change. Version 0.8.0 added the `select-candidates` skill and adapted the others
-to assisted candidate selection.
+Version 0.10.0, prepared on 2026-10-27, changes the `daily-report` instructions and the plugin README for
+the expanded simulation `exit-v2`: nine exit strategies and HOLD in a compact table per date, the first
+quote comparison, cash, equity, pending entries and limits always shown, the retrospective label for D to I,
+the highest observed result within one date without a ranking across dates, and per stock details, triggers
+and equity by session on request. It calls the same two tools; the bridge version constant follows the
+manifest. It requires a service with `exit-v2` to show D to I; with an `exit-v1` service it presents the
+four strategies returned. 0.10.0 was validated and packaged locally; it was not installed. Version 0.9.1,
+prepared on 2026-10-23, changed only the instructions of `collect-signals` and `select-candidates` for a
+Chrome profile shared with other projects; see [shared Chrome profile](#shared-chrome-profile). No tool,
+bridge behavior, backend or `daily-report` change; the bridge version constant follows the manifest. Version
+0.9.0, prepared on 2026-10-20, made the `daily-report` skill open with the simulated portfolio of each
+collection date, read from the extended `daily_report` tool, and keep the technical report on request; it
+calls only `service_status` and `daily_report`, as before, so a scheduled task limited to those two tools
+needs no change. Version 0.8.0 added the `select-candidates` skill and adapted the others to assisted
+candidate selection.
 
 | State | Scope |
 |---|---|
@@ -141,7 +147,7 @@ Steps run by the owner. Record the real results in [testing](testing.md).
    the dedicated environment, the Keychain item created with the prompting form of `security`, and the
    terminal check `sh /tmp/stock-radar-plugin/mcp/start.sh --check`.
 2. In the Claude desktop app open Customize, Plugins, replace the installed `stock-radar` with
-   `stock-radar-0.9.1.zip`, then quit and reopen the app.
+   `stock-radar-0.10.0.zip`, then quit and reopen the app.
 3. In a new Cowork task ask for a real call of `service_status`.
 
 | Outcome | Criterion |
@@ -277,3 +283,5 @@ background. Do not label a previous session's list as today's.
    pages can be opened, and that a late or interrupted selection is reported as such.
 10. After installing 0.9.1, observe one collection and selection: the authorized browser is used, only own
     tabs are closed, the page is accepted, rows load after scrolling and the receipts match.
+11. After deploying the `exit-v2` service and installing 0.10.0, read one daily report and confirm the ten
+    strategies, the retrospective label for D to I and that incomplete totals are not shown as zero.

@@ -1,7 +1,7 @@
 {
   "name": "stock-radar",
   "displayName": "Stock Radar",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Collect Brazilian stocks with a Strong Buy analyst rating and a negative daily change from TradingView. Research candidates and select up to three per session for tracking, with recorded reasons. Includes status and daily reports with a simulated portfolio per collection date. Connects to the private Stock Radar service through a local Python MCP bridge; credentials stay in the macOS Keychain.",
   "author": {
     "name": "Endrigo Marco"
